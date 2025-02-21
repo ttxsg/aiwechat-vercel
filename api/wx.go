@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
-
+	"log"
 	"github.com/pwh-pwh/aiwechat-vercel/chat"
 	"github.com/pwh-pwh/aiwechat-vercel/config"
 	"github.com/silenceper/wechat/v2"
@@ -72,7 +72,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 		// 检查文本消息是否以 "0 " 开头
 		if len(msgContent) >= 2 && msgContent[:2] == "0 " {
 			Msg_get = msgContent[2:] // 去掉前面的 "0 " 进行处理
-
+			log.Println("Msg_get:", Msg_get)
 			// 进行 API 调用，替换 data_send 为 Msg_get
 			expenses, err := processRequest(Msg_get)
 			if err != nil {
@@ -114,12 +114,14 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 }
 
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
+	og.Println("Msg_get:", Msg_get)
 	// 获取今天的日期
 	todayDate := time.Now().Format("2006-01-02")
 	fmt.Println("Today's date:", todayDate) // 使用 todayDate 避免未使用变量警告
 
 	// 设置 API 请求 URL 和数据
 	apiKey := GetGeminiKey()
+	og.Println("apiKey:", apiKey)
 	if apiKey == "" {
 		return nil, fmt.Errorf("Gemini API key is empty")
 	}
@@ -138,7 +140,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 			},
 		},
 	}
-
+	
 	// 将数据转化为 JSON
 	payload, err := json.Marshal(data)
 	if err != nil {
@@ -148,6 +150,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 	// 发送 POST 请求
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
+		og.Println(" gemin POST 请求 resp:", resp)
 		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
@@ -194,9 +197,10 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 
 func insertToNotion(expenses []map[string]interface{}) []string {
 	// 设置 Notion API 密钥和数据库ID
-	NOTION_API_KEY := os.Getenv("NOTION_API_KEY") // 从环境变量中获取 Notion API 密钥
-	DATABASE_ID := os.Getenv("NOTION_DATABASE_ID") // 从环境变量中获取数据库 ID
-
+	// NOTION_API_KEY := os.Getenv("NOTION_API_KEY") // 从环境变量中获取 Notion API 密钥
+	// DATABASE_ID := os.Getenv("NOTION_DATABASE_ID") // 从环境变量中获取数据库 ID
+	NOTION_API_KEY = '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'  # 替换为你的 Notion API 密钥
+	DATABASE_ID = '1a161e88039681848fd5e7712ee2d7d8'  # 替换为你的数据库 ID
 	if NOTION_API_KEY == "" || DATABASE_ID == "" {
 		return []string{"Notion API key or database ID not set"}
 	}
