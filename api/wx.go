@@ -77,7 +77,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			expenses, err := processRequest(Msg_get)
 			if err != nil {
 				fmt.Println("Error processing request:", err)
-				replyMsg = "调用失败error"
+				replyMsg = "调用processRequest失败error"
 				return
 			}
 
@@ -85,7 +85,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			expensesJson, err := json.Marshal(expenses)
 			if err != nil {
 				fmt.Println("Error marshalling expenses to JSON:", err)
-				replyMsg = "调用失败error"
+				replyMsg = "调用转换为 JSON失败error"
 				return
 			}
 			replyMsg = string(expensesJson)
