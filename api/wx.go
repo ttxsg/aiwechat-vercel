@@ -204,6 +204,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 	return expenses, nil
 }
 func insertToNotion(expenses []map[string]interface{}) []string {
+	log.Println("expenses:", expenses)
 	// 设置 Notion API 密钥和数据库ID
 	NOTION_API_KEY := "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" // 使用 := 声明并赋值
 	DATABASE_ID := "1a161e88039681848fd5e7712ee2d7d8"                   // 使用 := 声明并赋值
