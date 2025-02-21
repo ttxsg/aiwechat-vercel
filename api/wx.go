@@ -76,7 +76,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			// 进行 API 调用，替换 data_send 为 Msg_get
 			expenses, err := processRequest(Msg_get)
 			if err != nil {
-				fmt.Println("Error processing request:", err)
+				log.Println("Error processing request:", err)
 				replyMsg = "调用processRequest失败error"
 				return
 			}
@@ -84,7 +84,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			// 将 expenses 转换为 JSON 字符串
 			expensesJson, err := json.Marshal(expenses)
 			if err != nil {
-				fmt.Println("Error marshalling expenses to JSON:", err)
+				log.Println("Error marshalling expenses to JSON:", err)
 				replyMsg = "调用转换为 JSON失败error"
 				return
 			}
@@ -96,7 +96,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			// 输出反馈信息
 			var replyBuilder strings.Builder
 			for _, message := range feedback {
-				fmt.Println(message)
+				log.Println(message)
 				replyBuilder.WriteString(message + "\n")
 			}
 			replyMsg = replyBuilder.String()
@@ -231,39 +231,39 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 					"title": []map[string]interface{}{
 						{
 							"text": map[string]interface{}{
-								"content": entry["名称"],
+								"content": entry["名称"].(string), // 确保字段名称和数据类型正确
 							},
 						},
 					},
 				},
 				"金额": map[string]interface{}{
-					"number": entry["金额"],
+					"number": entry["金额"].(float64), // 确保字段名称和数据类型正确
 				},
 				"标签": map[string]interface{}{
 					"select": map[string]interface{}{
-						"name": entry["标签"],
+						"name": entry["标签"].(string), // 确保字段名称和数据类型正确
 					},
 				},
 				"日期": map[string]interface{}{
 					"date": map[string]interface{}{
-						"start": entry["日期"],
+						"start": entry["日期"].(string), // 确保字段名称和数据类型正确
 					},
 				},
 				"支付方式": map[string]interface{}{
 					"select": map[string]interface{}{
-						"name": entry["支付方式"],
+						"name": entry["支付方式"].(string), // 确保字段名称和数据类型正确
 					},
 				},
 				"开支类型": map[string]interface{}{
 					"select": map[string]interface{}{
-						"name": entry["开支类型"],
+						"name": entry["开支类型"].(string), // 确保字段名称和数据类型正确
 					},
 				},
 				"说明": map[string]interface{}{
 					"rich_text": []map[string]interface{}{
 						{
 							"text": map[string]interface{}{
-								"content": entry["说明"],
+								"content": entry["说明"].(string), // 确保字段名称和数据类型正确
 							},
 						},
 					},
@@ -272,7 +272,7 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 					"rich_text": []map[string]interface{}{
 						{
 							"text": map[string]interface{}{
-								"content": entry["备注"],
+								"content": entry["备注"].(string), // 确保字段名称和数据类型正确
 							},
 						},
 					},
@@ -280,8 +280,11 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 			},
 		}
 
-		// 发送请求插入数据
+		// 打印请求的 JSON 数据（用于调试）
 		payloadBytes, _ := json.Marshal(payload)
+		log.Println("Notion API request payload:", string(payloadBytes))
+
+		// 发送请求插入数据
 		req, err := http.NewRequest("POST", "https://api.notion.com/v1/pages", bytes.NewBuffer(payloadBytes))
 		if err != nil {
 			feedback = append(feedback, fmt.Sprintf("Error creating request for %v: %v", entry["名称"], err))
@@ -299,6 +302,10 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 			continue
 		}
 		defer resp.Body.Close()
+
+		// 打印 Notion API 的响应（用于调试）
+		body, _ := ioutil.ReadAll(resp.Body)
+		log.Println("Notion API response:", string(body))
 
 		if resp.StatusCode == http.StatusOK {
 			feedback = append(feedback, fmt.Sprintf("Successfully added: %v", entry["名称"]))
