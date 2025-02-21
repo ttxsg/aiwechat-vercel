@@ -150,7 +150,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 	// 发送 POST 请求
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
-		og.Println(" gemin POST 请求 resp:", resp)
+		log.Println(" gemin POST 请求 resp:", resp)
 		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
