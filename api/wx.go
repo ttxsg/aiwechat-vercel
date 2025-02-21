@@ -272,7 +272,7 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 					"rich_text": []map[string]interface{}{
 						{
 							"text": map[string]interface{}{
-								"content": entry["备注"].(string), // 确保字段名称和数据类型正确
+								"content":entry["备注"], // 确保字段名称和数据类型正确
 							},
 						},
 					},
