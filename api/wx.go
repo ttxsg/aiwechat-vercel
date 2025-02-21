@@ -16,6 +16,18 @@ import (
 	offConfig "github.com/silenceper/wechat/v2/officialaccount/config"
 	"github.com/silenceper/wechat/v2/officialaccount/message"
 )
+import "os"
+
+const (
+	Gemini_Welcome_Reply_Key = "geminiWelcomeReply"
+	Gemini_Key               = "geminiKey"
+)
+
+
+
+func GetGeminiKey() string {
+	return os.Getenv(Gemini_Key)
+}
 
 func Wx(rw http.ResponseWriter, req *http.Request) {
 	wc := wechat.NewWechat()
@@ -98,7 +110,8 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 	todayDate := time.Now().Format("2006-01-02")
 
 	// 设置 API 请求 URL 和数据
-	apiKey := "AIzaSyAlb7YAR5aCZIGS3yZLzFEIdhDjllvjFZA" // 替换为你的 API 密钥
+	apiKey := GetGeminiKey()
+	
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", apiKey)
 
 	// 请求的数据
