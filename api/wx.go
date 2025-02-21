@@ -121,7 +121,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 
 	// 设置 API 请求 URL 和数据
 	apiKey := GetGeminiKey()
-	og.Println("apiKey:", apiKey)
+	log.Println("apiKey:", apiKey)
 	if apiKey == "" {
 		return nil, fmt.Errorf("Gemini API key is empty")
 	}
