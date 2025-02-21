@@ -140,7 +140,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 			},
 		},
 	}
-	
+
 	// 将数据转化为 JSON
 	payload, err := json.Marshal(data)
 	if err != nil {
@@ -150,7 +150,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 	// 发送 POST 请求
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
-		log.Println(" gemin POST 请求 resp:", resp)
+		log.Println("Gemini POST 请求 resp:", resp)
 		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
@@ -165,6 +165,9 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, string(body))
 	}
+
+	// 打印 Gemini API 返回的原始数据（用于调试）
+	log.Println("Gemini API response body:", string(body))
 
 	// 解析 JSON 响应
 	var apiResponse struct {
@@ -181,12 +184,16 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 		return nil, fmt.Errorf("error unmarshalling JSON: %v", err)
 	}
 
-	// 提取文本内容并解析 JSON
+	// 提取文本内容并清理多余的字符
 	jsonText := apiResponse.Candidates[0].Content.Parts[0].Text
-	if strings.HasPrefix(jsonText, "```json") {
-		jsonText = jsonText[len("```json"):]
-	}
+	jsonText = strings.TrimSpace(jsonText) // 去除前后空格
+	jsonText = strings.TrimPrefix(jsonText, "```json") // 去除开头的 ```json
+	jsonText = strings.TrimSuffix(jsonText, "```") // 去除结尾的 ```
 
+	// 打印清理后的 JSON 文本（用于调试）
+	log.Println("Cleaned JSON text:", jsonText)
+
+	// 解析 JSON 内容
 	var expenses []map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
 		return nil, fmt.Errorf("error unmarshalling JSON content: %v", err)
