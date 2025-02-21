@@ -221,8 +221,21 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 
 	var feedback []string
 
+	// 确保 expenses 是一个 []map[string]interface{}
+	// 如果 expenses 是嵌套的数组，先将其展平
+	var flatExpenses []map[string]interface{}
+	for _, expense := range expenses {
+		if nestedExpenses, ok := expense["data"].([]map[string]interface{}); ok {
+			// 如果 expense 包含嵌套的 "data" 字段
+			flatExpenses = append(flatExpenses, nestedExpenses...)
+		} else {
+			// 否则直接添加到 flatExpenses
+			flatExpenses = append(flatExpenses, expense)
+		}
+	}
+
 	// 向 Notion 插入每条记录
-	for _, entry := range expenses {
+	for _, entry := range flatExpenses {
 		payload := map[string]interface{}{
 			"parent": map[string]interface{}{
 				"database_id": DATABASE_ID,
@@ -273,7 +286,7 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 					"rich_text": []map[string]interface{}{
 						{
 							"text": map[string]interface{}{
-								"content":entry["备注"].(string), // 确保字段名称和数据类型正确
+								"content": entry["备注"].(string), // 确保字段名称和数据类型正确
 							},
 						},
 					},
