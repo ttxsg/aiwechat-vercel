@@ -114,7 +114,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 }
 
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
-	og.Println("Msg_get:", Msg_get)
+	log.Println("Msg_get:", Msg_get)
 	// 获取今天的日期
 	todayDate := time.Now().Format("2006-01-02")
 	fmt.Println("Today's date:", todayDate) // 使用 todayDate 避免未使用变量警告
