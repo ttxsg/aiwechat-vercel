@@ -4,6 +4,7 @@ import (
     "fmt"
     "net/http"
     "bytes"
+    "strings" // 添加这一行
     "encoding/json"
     "io/ioutil"
     "time"
@@ -75,12 +76,14 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			Msg_get = msgContent[2:] // 去掉前面的 "0 " 进行处理
 			// 进行 API 调用，替换 data_send 为 Msg_get
 			expenses, err := processRequest(Msg_get)
+			expensesJson, err := json.Marshal(expenses)
 			if err != nil {
 				fmt.Println("Error processing request:", err)
 				replyMsg="调用失败error"
 				return
 			}
-			replyMsg=expenses
+			
+			replyMsg = string(expensesJson)
 			// 调用 Notion API 插入数据
 			
 			feedback := insertToNotion(expenses)
