@@ -1,22 +1,21 @@
 package api
 
 import (
-	"fmt"
-	"net/http"
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"net/http"
-	"time"
-	"github.com/pwh-pwh/aiwechat-vercel/chat"
-	"github.com/pwh-pwh/aiwechat-vercel/config"
-	"github.com/silenceper/wechat/v2"
-	"github.com/silenceper/wechat/v2/cache"
-	offConfig "github.com/silenceper/wechat/v2/officialaccount/config"
-	"github.com/silenceper/wechat/v2/officialaccount/message"
+    "fmt"
+    "net/http"
+    "bytes"
+    "encoding/json"
+    "io/ioutil"
+    "time"
+    "github.com/pwh-pwh/aiwechat-vercel/chat"
+    "github.com/pwh-pwh/aiwechat-vercel/config"
+    "github.com/silenceper/wechat/v2"
+    "github.com/silenceper/wechat/v2/cache"
+    offConfig "github.com/silenceper/wechat/v2/officialaccount/config"
+    "github.com/silenceper/wechat/v2/officialaccount/message"
+    "os"
 )
-import "os"
+
 
 const (
 	Gemini_Welcome_Reply_Key = "geminiWelcomeReply"
@@ -65,6 +64,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 	msgType := msg.MsgType
 	msgContent := msg.Content
 	userId := string(msg.FromUserName)
+	var Msg_get string // 定义 Msg_get 变量
 	// 判断消息类型是否是文本消息
 	if msgType == message.MsgTypeText {
 		// 检查文本消息是否以 "0 " 开头
@@ -86,10 +86,13 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			feedback := insertToNotion(expenses)
 
 			// 输出反馈信息
+			feedback := insertToNotion(expenses)
+			var replyBuilder strings.Builder
 			for _, message := range feedback {
-				fmt.Println(message)
-				replyMsg=message
+			    fmt.Println(message)
+			    replyBuilder.WriteString(message + "\n")
 			}
+			replyMsg = replyBuilder.String()
 			
 		} else {
 			// 如果不是以 "0 " 开头，则使用正常的聊天处理
@@ -167,9 +170,11 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 	}
 
 	// 提取文本内容并解析 JSON
+	
 	jsonText := apiResponse.Candidates[0].Content.Parts[0].Text
-	jsonText = jsonText[3:] // 去掉 "```json" 和换行符
-
+	if strings.HasPrefix(jsonText, "```json") {
+	    jsonText = jsonText[len("```json"):]
+	}
 	var expenses []map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
 		return nil, fmt.Errorf("error unmarshalling JSON content: %v", err)
@@ -272,6 +277,7 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 		} else {
 			feedback = append(feedback, fmt.Sprintf("Failed to add %v: %v", entry["名称"], resp.Status))
 		}
+		
 	}
 
 	return feedback
