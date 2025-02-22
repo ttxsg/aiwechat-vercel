@@ -71,6 +71,33 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 
 	// 判断消息类型是否是文本消息
 	if msgType == message.MsgTypeText {
+		// 检查文本消息是否以 "添加记账账号" 开头
+		if strings.HasPrefix(msgContent, "添加记账账号") {
+			// 解析消息内容，提取 NOTION_API_KEY 和 DATABASE_ID
+			lines := strings.Split(msgContent, "\n")
+			if len(lines) < 3 {
+				replyMsg = "格式错误，请按照以下格式输入：\n添加记账账号\nNOTION_API_KEY = 'your_api_key'\nDATABASE_ID = 'your_database_id'"
+				return
+			}
+
+			// 提取 NOTION_API_KEY 和 DATABASE_ID
+			notionApiKey := strings.TrimSpace(strings.Split(lines[1], "=")[1])
+			notionApiKey = strings.Trim(notionApiKey, "'\"")
+			databaseId := strings.TrimSpace(strings.Split(lines[2], "=")[1])
+			databaseId = strings.Trim(databaseId, "'\"")
+
+			// 插入到 Notion 配置数据库
+			feedback := insertToNotionConfig(userId, notionApiKey, databaseId)
+
+			// 输出反馈信息
+			var replyBuilder strings.Builder
+			for _, message := range feedback {
+				log.Println(message)
+				replyBuilder.WriteString(message + "\n")
+			}
+			replyMsg = replyBuilder.String()
+			return
+		}
 		// 检查文本消息是否以 "0 " 开头
 		if len(msgContent) >= 2 && msgContent[:2] == "0 " {
 			Msg_get = msgContent[2:] // 去掉前面的 "0 " 进行处理
@@ -114,7 +141,97 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 	}
 	return
 }
+// insertToNotionConfig 将用户配置插入到 Notion 配置数据库
+func insertToNotionConfig(userId, notionApiKey, databaseId string) []string {
+	// Notion 配置数据库的 Database ID
+	configDatabaseId := os.Getenv("NOTION_CONFIG_DATABASE_ID")
+	if configDatabaseId == "" {
+		return []string{"NOTION_CONFIG_DATABASE_ID 未设置"}
+	}
 
+	// Notion API Key
+	notionApiKeyForConfig := os.Getenv("NOTION_API_KEY")
+	if notionApiKeyForConfig == "" {
+		return []string{"NOTION_API_KEY 未设置"}
+	}
+
+	// 设置请求头
+	headers := map[string]string{
+		"Authorization":  fmt.Sprintf("Bearer %s", notionApiKeyForConfig),
+		"Content-Type":   "application/json",
+		"Notion-Version": NOTION_API_VERSION,
+	}
+
+	// 构造请求数据
+	payload := map[string]interface{}{
+		"parent": map[string]interface{}{
+			"database_id": configDatabaseId,
+		},
+		"properties": map[string]interface{}{
+			"用户id": map[string]interface{}{
+				"title": []map[string]interface{}{
+					{
+						"text": map[string]interface{}{
+							"content": userId,
+						},
+					},
+				},
+			},
+			"NOTION_API_KEY": map[string]interface{}{
+				"rich_text": []map[string]interface{}{
+					{
+						"text": map[string]interface{}{
+							"content": notionApiKey,
+						},
+					},
+				},
+			},
+			"DATABASE_ID": map[string]interface{}{
+				"rich_text": []map[string]interface{}{
+					{
+						"text": map[string]interface{}{
+							"content": databaseId,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// 发送请求插入数据
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return []string{fmt.Sprintf("Error marshalling payload: %v", err)}
+	}
+
+	url := "https://api.notion.com/v1/pages"
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return []string{fmt.Sprintf("Error creating request: %v", err)}
+	}
+
+	for key, value := range headers {
+		req.Header.Add(key, value)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return []string{fmt.Sprintf("Error sending request: %v", err)}
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return []string{fmt.Sprintf("Error reading response: %v", err)}
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		return []string{fmt.Sprintf("Successfully added: %s", userId)}
+	} else {
+		return []string{fmt.Sprintf("Failed to add %s: %s", userId, string(body))}
+	}
+}
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
     log.Println("Msg_get:", Msg_get)
     todayDate := time.Now().Format("2006-01-02")
