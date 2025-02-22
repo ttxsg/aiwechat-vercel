@@ -157,6 +157,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 	return
 }
 
+
 // QueryUserConfig 查询 Notion 数据库，获取用户的配置
 func QueryUserConfig(userId string) (*UserConfig, error) {
 	// Notion 配置数据库的 Database ID
@@ -176,7 +177,7 @@ func QueryUserConfig(userId string) (*UserConfig, error) {
 	payload := map[string]interface{}{
 		"filter": map[string]interface{}{
 			"property": "用户id",
-			"text": map[string]interface{}{
+			"title": map[string]interface{}{
 				"equals": userId,
 			},
 		},
