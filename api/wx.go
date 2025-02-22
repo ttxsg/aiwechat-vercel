@@ -173,6 +173,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 	return
 }
 
+
 // deleteFromNotionConfig 删除 Notion 配置数据库中的记录
 func deleteFromNotionConfig(userId, databaseType string) []string {
 	// Notion 配置数据库的 Database ID
@@ -204,9 +205,19 @@ func deleteFromNotionConfig(userId, databaseType string) []string {
 		"Notion-Version": NOTION_API_VERSION,
 	}
 
-	// 发送请求删除数据
+	// 构造请求数据，将记录标记为已归档（archived）
+	payload := map[string]interface{}{
+		"archived": true,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return []string{fmt.Sprintf("Error marshalling payload: %v", err)}
+	}
+
+	// 发送请求更新数据（标记为已归档）
 	url := fmt.Sprintf("https://api.notion.com/v1/pages/%s", existingPageId)
-	req, err := http.NewRequest("DELETE", url, nil)
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return []string{fmt.Sprintf("Error creating request: %v", err)}
 	}
