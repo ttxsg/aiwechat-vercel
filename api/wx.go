@@ -119,7 +119,74 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			replyMsg = replyBuilder.String()
 			return
 		}
-		
+		// 检查文本消息是否以 "添加记账账号" 开头
+		  if strings.HasPrefix(msgContent, "添加工资记账") {
+			// 解析消息内容，提取 NOTION_API_KEY 和 DATABASE_ID
+			lines := strings.Split(msgContent, "\n")
+			if len(lines) < 3 {
+				replyMsg = "格式错误，请按照以下格式输入：\n添加记账账号\nNOTION_API_KEY = 'your_api_key'\nDATABASE_ID = 'your_database_id'"
+				return
+			}
+
+			// 提取 NOTION_API_KEY 和 DATABASE_ID
+			notionApiKey := strings.TrimSpace(strings.Split(lines[1], "=")[1])
+			notionApiKey = strings.Trim(notionApiKey, "'\"")
+			databaseId := strings.TrimSpace(strings.Split(lines[2], "=")[1])
+			databaseId = strings.Trim(databaseId, "'\"")
+
+			// 插入到 Notion 配置数据库，数据库类型默认为 0（记账数据库）
+			feedback := insertToNotionConfig(userId, notionApiKey, databaseId, "1")
+
+			// 输出反馈信息
+			var replyBuilder strings.Builder
+			for _, message := range feedback {
+				log.Println(message)
+				replyBuilder.WriteString(message + "\n")
+			}
+			replyMsg = replyBuilder.String()
+			return
+		  }
+		  //检查文本消息以"1 "开头
+		  if len(msgContent) >= 2 && msgContent[:2] == "1 " {
+			// 查询用户配置，数据库类型为1（记工资数据库）
+			userConfig, err := QueryUserConfig(userId, "1")
+			
+			if err != nil {
+				log.Println("Error querying user config:", err)
+				replyMsg = "用户未绑定 ，请先绑定账号和 Notion 数据库"
+				return
+			}
+			Msg_get = msgContent[2:] // 去掉前面的 "0 " 进行处理
+			log.Println("Msg_get:", Msg_get)
+			// 进行 API 调用，替换 data_send 为 Msg_get
+			expenses, err := processRequest_gongzi(Msg_get)
+			if err != nil {
+				log.Println("Error processing request:", err)
+				replyMsg = "调用processRequest_gongzi失败error"
+				return
+			}
+
+			// 将 expenses 转换为 JSON 字符串
+			expensesJson, err := json.Marshal(expenses)
+			if err != nil {
+				log.Println("Error marshalling expenses to JSON:", err)
+				replyMsg = "调用转换为 JSON失败error"
+				return
+			}
+			replyMsg = string(expensesJson)
+
+			
+			// 调用 Notion API 插入数据
+			feedback := insertToNotion_gongzi(userConfig.DATABASE_ID, userConfig.NOTION_API_KEY, expenses)
+
+			// 输出反馈信息
+			var replyBuilder strings.Builder
+			for _, message := range feedback {
+				log.Println(message)
+				replyBuilder.WriteString(message + "\n")
+			}
+			replyMsg = replyBuilder.String()
+		  } 
 		// 检查文本消息是否以 "0 " 开头
 		if len(msgContent) >= 2 && msgContent[:2] == "0 " {
 			// 查询用户配置，数据库类型为 0（记账数据库）
@@ -173,7 +240,240 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 	return
 }
 
+// processRequest_gongzi 调用 AI 接口，生成工资记录的 JSON 数据
+func processRequest_gongzi(Msg_get string) ([]map[string]interface{}, error) {
+	log.Println("Msg_get:", Msg_get)
+	todayDate := time.Now().Format("2006-01-02")
+	log.Println("Today's date:", todayDate)
 
+	apiKey := GetGeminiKey()
+	log.Println("apiKey:", apiKey)
+	if apiKey == "" {
+		return nil, fmt.Errorf("Gemini API key is empty")
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", apiKey)
+
+	// 构造请求数据
+	prompt := fmt.Sprintf(`
+		今天是 %s，请根据以下工资记录生成 JSON 数据：
+		%s
+		如果没有指定日期，默认使用今天；如果没有金额，请估算一个合理的数值；单位默认是公司单位（例如 donghua）。；标签从下面选择：固定工资 ，兼职写代码 ，家人资助，人情往来礼金，其他兼职；
+		返回的 JSON 格式如下：
+		[
+			{
+				"名称": "工资名称",
+				"标签": ["工资"],
+				"日期": "2025-01-12",
+				"金额": 10000,
+				"单位": "donghua"
+			}
+		]
+		支持一次性处理多条工资记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
+	`, todayDate, Msg_get)
+
+	data := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"parts": []map[string]interface{}{
+					{
+						"text": prompt,
+					},
+				},
+			},
+		},
+	}
+
+	log.Println("发送的请求 data:", data)
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling data: %v", err)
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		log.Println("Gemini POST 请求 resp:", resp)
+		return nil, fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Println("Gemini API response body:", string(body))
+
+	var apiResponse struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("error unmarshalling JSON: %v", err)
+	}
+
+	if len(apiResponse.Candidates) == 0 || len(apiResponse.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("no valid response from Gemini API")
+	}
+
+	jsonText := apiResponse.Candidates[0].Content.Parts[0].Text
+	jsonText = strings.TrimSpace(jsonText)
+	jsonText = strings.TrimPrefix(jsonText, "```json")
+	jsonText = strings.TrimSuffix(jsonText, "```")
+
+	log.Println("Cleaned JSON text:", jsonText)
+
+	var expenses []map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
+		return nil, fmt.Errorf("error unmarshalling JSON content: %v", err)
+	}
+
+	// 校验返回的数据格式
+	for _, expense := range expenses {
+		if _, ok := expense["名称"]; !ok {
+			return nil, fmt.Errorf("missing required field: 名称")
+		}
+		if _, ok := expense["标签"]; !ok {
+			return nil, fmt.Errorf("missing required field: 标签")
+		}
+		if _, ok := expense["日期"]; !ok {
+			return nil, fmt.Errorf("missing required field: 日期")
+		}
+		if _, ok := expense["金额"]; !ok {
+			return nil, fmt.Errorf("missing required field: 金额")
+		}
+		if _, ok := expense["单位"]; !ok {
+			// 如果单位字段缺失，默认设置为公司单位
+			expense["单位"] = "donghua"
+		}
+	}
+
+	return expenses, nil
+}
+// insertToNotion_gongzi 将工资记录插入到 Notion 数据库
+func insertToNotion_gongzi(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
+	log.Println("expenses:", expenses)
+
+	// 设置请求头
+	headers := map[string]string{
+		"Authorization":  fmt.Sprintf("Bearer %s", notionApiKey),
+		"Content-Type":   "application/json",
+		"Notion-Version": NOTION_API_VERSION,
+	}
+
+	var feedback []string
+
+	// 确保 expenses 是一个 []map[string]interface{}
+	// 如果 expenses 是嵌套的数组，先将其展平
+	var flatExpenses []map[string]interface{}
+	for _, expense := range expenses {
+		if nestedExpenses, ok := expense["data"].([]map[string]interface{}); ok {
+			// 如果 expense 包含嵌套的 "data" 字段
+			flatExpenses = append(flatExpenses, nestedExpenses...)
+		} else {
+			// 否则直接添加到 flatExpenses
+			flatExpenses = append(flatExpenses, expense)
+		}
+	}
+
+	// 向 Notion 插入每条记录
+	for _, entry := range flatExpenses {
+		// 处理多选字段 "标签"
+		var tags []map[string]interface{}
+		if tagList, ok := entry["标签"].([]interface{}); ok {
+			for _, tag := range tagList {
+				tags = append(tags, map[string]interface{}{"name": tag})
+			}
+		} else {
+			// 如果标签不是列表，直接添加
+			tags = append(tags, map[string]interface{}{"name": entry["标签"]})
+		}
+
+		// 确保单位字段存在，如果不存在则设置为默认值 ""
+		unit := "**公司"
+		if u, ok := entry["单位"].(string); ok {
+			unit = u
+		}
+
+		payload := map[string]interface{}{
+			"parent": map[string]interface{}{
+				"database_id": databaseId,
+			},
+			"properties": map[string]interface{}{
+				"名称": map[string]interface{}{
+					"title": []map[string]interface{}{
+						{
+							"text": map[string]interface{}{
+								"content": entry["名称"].(string), // 确保字段名称和数据类型正确
+							},
+						},
+					},
+				},
+				"标签": map[string]interface{}{
+					"multi_select": tags, // 多选字段
+				},
+				"日期": map[string]interface{}{
+					"date": map[string]interface{}{
+						"start": entry["日期"].(string), // 确保字段名称和数据类型正确
+					},
+				},
+				"金额": map[string]interface{}{
+					"number": entry["金额"].(float64), // 确保字段名称和数据类型正确
+				},
+				"单位": map[string]interface{}{
+					"select": map[string]interface{}{
+						"name": unit, // 使用处理后的单位字段
+					},
+				},
+			},
+		}
+
+		// 打印请求的 JSON 数据（用于调试）
+		payloadBytes, _ := json.Marshal(payload)
+		log.Println("Notion API request payload:", string(payloadBytes))
+
+		// 发送请求插入数据
+		req, err := http.NewRequest("POST", "https://api.notion.com/v1/pages", bytes.NewBuffer(payloadBytes))
+		if err != nil {
+			feedback = append(feedback, fmt.Sprintf("Error creating request for %v: %v", entry["名称"], err))
+			continue
+		}
+
+		for key, value := range headers {
+			req.Header.Add(key, value)
+		}
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			feedback = append(feedback, fmt.Sprintf("Error inserting %v: %v", entry["名称"], err))
+			continue
+		}
+		defer resp.Body.Close()
+
+		// 打印 Notion API 的响应（用于调试）
+		body, _ := ioutil.ReadAll(resp.Body)
+		log.Println("Notion API response:", string(body))
+
+		if resp.StatusCode == http.StatusOK {
+			feedback = append(feedback, fmt.Sprintf("Successfully added: %v", entry["名称"]))
+		} else {
+			feedback = append(feedback, fmt.Sprintf("Failed to add %v: %v", entry["名称"], resp.Status))
+		}
+	}
+
+	return feedback
+}
 // deleteFromNotionConfig 删除 Notion 配置数据库中的记录
 func deleteFromNotionConfig(userId, databaseType string) []string {
 	// Notion 配置数据库的 Database ID
@@ -338,8 +638,7 @@ func QueryUserConfig(userId, databaseType string) (*UserConfig, error) {
 
 	return userConfig, nil
 }
-// insertToNotionConfig 将用户配置插入到 Notion 配置数据库
-// insertToNotionConfig 将用户配置插入到 Notion 配置数据库
+
 // insertToNotionConfig 将用户配置插入到 Notion 配置数据库
 func insertToNotionConfig(userId, notionApiKey, databaseId, databaseType string) []string {
 	// Notion 配置数据库的 Database ID
@@ -523,6 +822,83 @@ func queryExistingPageId(userId, databaseType, configDatabaseId, notionApiKey st
 	return "", nil
 }
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
+    log.Println("Msg_get:", Msg_get)
+    todayDate := time.Now().Format("2006-01-02")
+    log.Println("Today's date:", todayDate)
+
+    apiKey := GetGeminiKey()
+    log.Println("apiKey:", apiKey)
+    if apiKey == "" {
+        return nil, fmt.Errorf("Gemini API key is empty")
+    }
+
+    url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", apiKey)
+
+   
+	data := map[string]interface{}{
+    "contents": []map[string]interface{}{
+        {
+            "parts": []map[string]interface{}{
+                {
+                    "text": fmt.Sprintf("今天是 %s ，记账 %s ，如果没有指定时间，默认是今天；如果没有金额，帮我虚拟估算一个数；支付方式只有 支付宝 或微信 或银行卡 ；标签从以下内容选 生活吃喝加买菜 房贷-银行金 医疗保健 水电物业 出行 家人-互动生活穿衣用品 家用设备 电子设备 电话费 旅游 其他 摩托车 网购 学习课程；开支类型从下面选择：其他 日常开支 固定开支 社交娱乐开支 节假日开支 教育和自我提升开支 医疗保健开支 意外或紧急开支!! 交通开支(出行) 加油 购物；注意 你给我返回一个json组合成的列表格式，不要和内容无关的东西，不要重复给我，其中不需要换行符，下面给你一个例子，和内容无关：“data =名称: 买水果, 金额: 20, 标签: 生活吃喝加买菜, 日期：2025-01-12，支付方式: 微信,开支类型：日常开支 ，说明: 水果购买，备注: 每天都要吃", todayDate, Msg_get),
+                },
+            },
+        },
+    },
+}
+    log.Println("发送的请求 data:", data)
+    payload, err := json.Marshal(data)
+    if err != nil {
+        return nil, fmt.Errorf("error marshalling data: %v", err)
+    }
+
+    resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
+    if err != nil {
+        log.Println("Gemini POST 请求 resp:", resp)
+        return nil, fmt.Errorf("error sending request: %v", err)
+    }
+    defer resp.Body.Close()
+
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("error reading response: %v", err)
+    }
+
+    if resp.StatusCode != http.StatusOK {
+        return nil, fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, string(body))
+    }
+
+    log.Println("Gemini API response body:", string(body))
+
+    var apiResponse struct {
+        Candidates []struct {
+            Content struct {
+                Parts []struct {
+                    Text string `json:"text"`
+                } `json:"parts"`
+            } `json:"content"`
+        } `json:"candidates"`
+    }
+
+    if err := json.Unmarshal(body, &apiResponse); err != nil {
+        return nil, fmt.Errorf("error unmarshalling JSON: %v", err)
+    }
+
+    jsonText := apiResponse.Candidates[0].Content.Parts[0].Text
+    jsonText = strings.TrimSpace(jsonText)
+    jsonText = strings.TrimPrefix(jsonText, "```json")
+    jsonText = strings.TrimSuffix(jsonText, "```")
+
+    log.Println("Cleaned JSON text:", jsonText)
+
+    var expenses []map[string]interface{}
+    if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
+        return nil, fmt.Errorf("error unmarshalling JSON content: %v", err)
+    }
+
+    return expenses, nil
+}
+func processRequest_gongzi(Msg_get string) ([]map[string]interface{}, error) {
     log.Println("Msg_get:", Msg_get)
     todayDate := time.Now().Format("2006-01-02")
     log.Println("Today's date:", todayDate)
