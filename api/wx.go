@@ -366,6 +366,7 @@ func processRequest_gongzi(Msg_get string) ([]map[string]interface{}, error) {
 	return expenses, nil
 }
 // insertToNotion_gongzi 将工资记录插入到 Notion 数据库
+// insertToNotion_gongzi 将工资记录插入到 Notion 数据库
 func insertToNotion_gongzi(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
 	log.Println("expenses:", expenses)
 
@@ -404,12 +405,6 @@ func insertToNotion_gongzi(databaseId, notionApiKey string, expenses []map[strin
 			tags = append(tags, map[string]interface{}{"name": entry["标签"]})
 		}
 
-		// 确保单位字段存在，如果不存在则设置为默认值 ""
-		unit := "**公司"
-		if u, ok := entry["单位"].(string); ok {
-			unit = u
-		}
-
 		payload := map[string]interface{}{
 			"parent": map[string]interface{}{
 				"database_id": databaseId,
@@ -435,9 +430,9 @@ func insertToNotion_gongzi(databaseId, notionApiKey string, expenses []map[strin
 				"金额": map[string]interface{}{
 					"number": entry["金额"].(float64), // 确保字段名称和数据类型正确
 				},
-				"单位": map[string]interface{}{
+				"工作单位": map[string]interface{}{ // 工作单位字段
 					"select": map[string]interface{}{
-						"name": unit, // 使用处理后的单位字段
+						"name": entry["单位"].(string), // 直接使用 entry["单位"] 的值
 					},
 				},
 			},
