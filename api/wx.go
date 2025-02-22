@@ -78,8 +78,22 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 
 	// 判断消息类型是否是文本消息
 	if msgType == message.MsgTypeText {
-		// 检查文本消息是否以 "添加记账账号" 开头
-		if strings.HasPrefix(msgContent, "添加记账账号") {
+		
+		  // 检查文本消息是否以 "删除记账账号" 开头
+		  if strings.HasPrefix(msgContent, "删除记账账号") {
+			// 删除记账账号
+			feedback := deleteFromNotionConfig(userId, "0") // 数据库类型为 0（记账数据库）
+			// 输出反馈信息
+			var replyBuilder strings.Builder
+			for _, message := range feedback {
+				log.Println(message)
+				replyBuilder.WriteString(message + "\n")
+			}
+			replyMsg = replyBuilder.String()
+			return
+		  }
+		  // 检查文本消息是否以 "添加记账账号" 开头
+		  if strings.HasPrefix(msgContent, "添加记账账号") {
 			// 解析消息内容，提取 NOTION_API_KEY 和 DATABASE_ID
 			lines := strings.Split(msgContent, "\n")
 			if len(lines) < 3 {
@@ -105,6 +119,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			replyMsg = replyBuilder.String()
 			return
 		}
+		
 		// 检查文本消息是否以 "0 " 开头
 		if len(msgContent) >= 2 && msgContent[:2] == "0 " {
 			// 查询用户配置，数据库类型为 0（记账数据库）
@@ -158,7 +173,66 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 	return
 }
 
+// deleteFromNotionConfig 删除 Notion 配置数据库中的记录
+func deleteFromNotionConfig(userId, databaseType string) []string {
+	// Notion 配置数据库的 Database ID
+	configDatabaseId := os.Getenv("NOTION_CONFIG_DATABASE_ID")
+	if configDatabaseId == "" {
+		return []string{"NOTION_CONFIG_DATABASE_ID 未设置"}
+	}
 
+	// Notion API Key
+	notionApiKey := os.Getenv("NOTION_API_KEY")
+	if notionApiKey == "" {
+		return []string{"NOTION_API_KEY 未设置"}
+	}
+
+	// 查询数据库中是否已存在相同的用户 ID 和数据库类型
+	existingPageId, err := queryExistingPageId(userId, databaseType, configDatabaseId, notionApiKey)
+	if err != nil {
+		return []string{fmt.Sprintf("Error querying existing page: %v", err)}
+	}
+
+	if existingPageId == "" {
+		return []string{fmt.Sprintf("未找到用户 %s 的记账账号", userId)}
+	}
+
+	// 设置请求头
+	headers := map[string]string{
+		"Authorization":  fmt.Sprintf("Bearer %s", notionApiKey),
+		"Content-Type":   "application/json",
+		"Notion-Version": NOTION_API_VERSION,
+	}
+
+	// 发送请求删除数据
+	url := fmt.Sprintf("https://api.notion.com/v1/pages/%s", existingPageId)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return []string{fmt.Sprintf("Error creating request: %v", err)}
+	}
+
+	for key, value := range headers {
+		req.Header.Add(key, value)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return []string{fmt.Sprintf("Error sending request: %v", err)}
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return []string{fmt.Sprintf("Error reading response: %v", err)}
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		return []string{fmt.Sprintf("Successfully deleted: %s", userId)}
+	} else {
+		return []string{fmt.Sprintf("Failed to delete %s: %s", userId, string(body))}
+	}
+}
 // QueryUserConfig 查询 Notion 数据库，获取用户的配置
 func QueryUserConfig(userId, databaseType string) (*UserConfig, error) {
 	// Notion 配置数据库的 Database ID
