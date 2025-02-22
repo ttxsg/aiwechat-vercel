@@ -20,9 +20,11 @@ import (
 	"github.com/silenceper/wechat/v2/officialaccount/message"
 )
 
+
 const (
 	Gemini_Welcome_Reply_Key = "geminiWelcomeReply"
 	Gemini_Key               = "geminiKey"
+	NOTION_API_VERSION = "2022-06-28"
 )
 
 func GetGeminiKey() string {
