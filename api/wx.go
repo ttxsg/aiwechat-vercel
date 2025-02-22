@@ -26,7 +26,11 @@ const (
 	Gemini_Key               = "geminiKey"
 	NOTION_API_VERSION = "2022-06-28"
 )
-
+type UserConfig struct {
+	UserId         string `json:"用户id"`
+	NOTION_API_KEY string `json:"NOTION_API_KEY"`
+	DATABASE_ID    string `json:"DATABASE_ID"`
+}
 func GetGeminiKey() string {
 	return os.Getenv(Gemini_Key)
 }
@@ -102,6 +106,14 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 		}
 		// 检查文本消息是否以 "0 " 开头
 		if len(msgContent) >= 2 && msgContent[:2] == "0 " {
+			
+			// 查询用户配置
+			userConfig, err := QueryUserConfig(userId)
+			if err != nil {
+				log.Println("Error querying user config:", err)
+				replyMsg = "用户未绑定 ，请先绑定账号和 Notion 数据库"
+				return
+			}
 			Msg_get = msgContent[2:] // 去掉前面的 "0 " 进行处理
 			log.Println("Msg_get:", Msg_get)
 			// 进行 API 调用，替换 data_send 为 Msg_get
@@ -121,8 +133,9 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			}
 			replyMsg = string(expensesJson)
 
+			
 			// 调用 Notion API 插入数据
-			feedback := insertToNotion(expenses)
+			feedback := insertToNotion(userConfig.DATABASE_ID, userConfig.NOTION_API_KEY, expenses)
 
 			// 输出反馈信息
 			var replyBuilder strings.Builder
@@ -142,6 +155,89 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 		replyMsg = bot.HandleMediaMsg(msg)
 	}
 	return
+}
+
+// QueryUserConfig 查询 Notion 数据库，获取用户的配置
+func QueryUserConfig(userId string) (*UserConfig, error) {
+	// Notion 配置数据库的 Database ID
+	configDatabaseId := os.Getenv("NOTION_CONFIG_DATABASE_ID")
+	if configDatabaseId == "" {
+		return nil, fmt.Errorf("NOTION_CONFIG_DATABASE_ID 未设置")
+	}
+
+	// Notion API Key
+	notionApiKey := os.Getenv("NOTION_API_KEY")
+	if notionApiKey == "" {
+		return nil, fmt.Errorf("NOTION_API_KEY 未设置")
+	}
+
+	// 构造查询请求
+	url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", configDatabaseId)
+	payload := map[string]interface{}{
+		"filter": map[string]interface{}{
+			"property": "用户id",
+			"text": map[string]interface{}{
+				"equals": userId,
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling payload: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %v", err)
+	}
+
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", notionApiKey))
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Notion-Version", NOTION_API_VERSION)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error unmarshalling response: %v", err)
+	}
+
+	// 提取用户配置
+	results := result["results"].([]interface{})
+	if len(results) == 0 {
+		return nil, fmt.Errorf("user %s not found in Notion config database", userId)
+	}
+
+	firstResult := results[0].(map[string]interface{})
+	properties := firstResult["properties"].(map[string]interface{})
+
+	userIdField := properties["用户id"].(map[string]interface{})
+	notionApiKeyField := properties["NOTION_API_KEY"].(map[string]interface{})
+	databaseIdField := properties["DATABASE_ID"].(map[string]interface{})
+
+	userConfig := &UserConfig{
+		UserId:         userIdField["title"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
+		NOTION_API_KEY: notionApiKeyField["rich_text"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
+		DATABASE_ID:    databaseIdField["rich_text"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
+	}
+
+	return userConfig, nil
 }
 // insertToNotionConfig 将用户配置插入到 Notion 配置数据库
 func insertToNotionConfig(userId, notionApiKey, databaseId string) []string {
@@ -311,21 +407,15 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 
     return expenses, nil
 }
-func insertToNotion(expenses []map[string]interface{}) []string {
-	log.Println("expenses:", expenses)
-	// 设置 Notion API 密钥和数据库ID
-	NOTION_API_KEY := "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" // 使用 := 声明并赋值
-	DATABASE_ID := "1a161e88039681848fd5e7712ee2d7d8"                   // 使用 := 声明并赋值
 
-	if NOTION_API_KEY == "" || DATABASE_ID == "" {
-		return []string{"Notion API key or database ID not set"}
-	}
+func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
+	log.Println("expenses:", expenses)
 
 	// 设置请求头
 	headers := map[string]string{
-		"Authorization":  fmt.Sprintf("Bearer %s", NOTION_API_KEY),
+		"Authorization":  fmt.Sprintf("Bearer %s", notionApiKey),
 		"Content-Type":   "application/json",
-		"Notion-Version": "2022-06-28",
+		"Notion-Version": NOTION_API_VERSION,
 	}
 
 	var feedback []string
@@ -347,7 +437,7 @@ func insertToNotion(expenses []map[string]interface{}) []string {
 	for _, entry := range flatExpenses {
 		payload := map[string]interface{}{
 			"parent": map[string]interface{}{
-				"database_id": DATABASE_ID,
+				"database_id": databaseId,
 			},
 			"properties": map[string]interface{}{
 				"名称": map[string]interface{}{
