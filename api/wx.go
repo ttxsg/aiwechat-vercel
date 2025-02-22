@@ -78,9 +78,8 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 
 	// 判断消息类型是否是文本消息
 	if msgType == message.MsgTypeText {
-		
-		  // 检查文本消息是否以 "删除记账账号" 开头
-		  if strings.HasPrefix(msgContent, "删除记账账号") {
+		// 检查文本消息是否以 "删除记账账号" 开头
+		if strings.HasPrefix(msgContent, "删除记账账号") {
 			// 删除记账账号
 			feedback := deleteFromNotionConfig(userId, "0") // 数据库类型为 0（记账数据库）
 			// 输出反馈信息
@@ -91,9 +90,10 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			}
 			replyMsg = replyBuilder.String()
 			return
-		  }
-		  // 检查文本消息是否以 "添加记账账号" 开头
-		  if strings.HasPrefix(msgContent, "添加记账账号") {
+		}
+
+		// 检查文本消息是否以 "添加记账账号" 开头
+		if strings.HasPrefix(msgContent, "添加记账账号") {
 			// 解析消息内容，提取 NOTION_API_KEY 和 DATABASE_ID
 			lines := strings.Split(msgContent, "\n")
 			if len(lines) < 3 {
@@ -119,8 +119,9 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			replyMsg = replyBuilder.String()
 			return
 		}
-		// 检查文本消息是否以 "添加记账账号" 开头
-		  if strings.HasPrefix(msgContent, "添加工资记账") {
+
+		// 检查文本消息是否以 "添加工资记账" 开头
+		if strings.HasPrefix(msgContent, "添加工资记账") {
 			// 解析消息内容，提取 NOTION_API_KEY 和 DATABASE_ID
 			lines := strings.Split(msgContent, "\n")
 			if len(lines) < 3 {
@@ -134,7 +135,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			databaseId := strings.TrimSpace(strings.Split(lines[2], "=")[1])
 			databaseId = strings.Trim(databaseId, "'\"")
 
-			// 插入到 Notion 配置数据库，数据库类型默认为 0（记账数据库）
+			// 插入到 Notion 配置数据库，数据库类型默认为 1（工资数据库）
 			feedback := insertToNotionConfig(userId, notionApiKey, databaseId, "1")
 
 			// 输出反馈信息
@@ -145,24 +146,26 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			}
 			replyMsg = replyBuilder.String()
 			return
-		  }
-		  //检查文本消息以"1 "开头
-		  if len(msgContent) >= 2 && msgContent[:2] == "1 " {
-			// 查询用户配置，数据库类型为1（记工资数据库）
+		}
+
+		// 检查文本消息以 "1 " 开头
+		if len(msgContent) >= 2 && msgContent[:2] == "1 " {
+			// 查询用户配置，数据库类型为 1（工资数据库）
 			userConfig, err := QueryUserConfig(userId, "1")
-			
 			if err != nil {
 				log.Println("Error querying user config:", err)
-				replyMsg = "用户未绑定 ，请先绑定账号和 Notion 数据库"
+				replyMsg = "用户未绑定，请先绑定账号和 Notion 数据库"
 				return
 			}
-			Msg_get = msgContent[2:] // 去掉前面的 "0 " 进行处理
+
+			Msg_get = msgContent[2:] // 去掉前面的 "1 " 进行处理
 			log.Println("Msg_get:", Msg_get)
+
 			// 进行 API 调用，替换 data_send 为 Msg_get
 			expenses, err := processRequest_gongzi(Msg_get)
 			if err != nil {
 				log.Println("Error processing request:", err)
-				replyMsg = "调用processRequest_gongzi失败error"
+				replyMsg = "调用 processRequest_gongzi 失败: " + err.Error()
 				return
 			}
 
@@ -170,12 +173,11 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			expensesJson, err := json.Marshal(expenses)
 			if err != nil {
 				log.Println("Error marshalling expenses to JSON:", err)
-				replyMsg = "调用转换为 JSON失败error"
+				replyMsg = "调用转换为 JSON 失败: " + err.Error()
 				return
 			}
 			replyMsg = string(expensesJson)
 
-			
 			// 调用 Notion API 插入数据
 			feedback := insertToNotion_gongzi(userConfig.DATABASE_ID, userConfig.NOTION_API_KEY, expenses)
 
@@ -186,24 +188,27 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 				replyBuilder.WriteString(message + "\n")
 			}
 			replyMsg = replyBuilder.String()
-		  } 
+			return
+		}
+
 		// 检查文本消息是否以 "0 " 开头
 		if len(msgContent) >= 2 && msgContent[:2] == "0 " {
 			// 查询用户配置，数据库类型为 0（记账数据库）
 			userConfig, err := QueryUserConfig(userId, "0")
-			
 			if err != nil {
 				log.Println("Error querying user config:", err)
-				replyMsg = "用户未绑定 ，请先绑定账号和 Notion 数据库"
+				replyMsg = "用户未绑定，请先绑定账号和 Notion 数据库"
 				return
 			}
+
 			Msg_get = msgContent[2:] // 去掉前面的 "0 " 进行处理
 			log.Println("Msg_get:", Msg_get)
+
 			// 进行 API 调用，替换 data_send 为 Msg_get
 			expenses, err := processRequest(Msg_get)
 			if err != nil {
 				log.Println("Error processing request:", err)
-				replyMsg = "调用processRequest失败error"
+				replyMsg = "调用 processRequest 失败: " + err.Error()
 				return
 			}
 
@@ -211,12 +216,11 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			expensesJson, err := json.Marshal(expenses)
 			if err != nil {
 				log.Println("Error marshalling expenses to JSON:", err)
-				replyMsg = "调用转换为 JSON失败error"
+				replyMsg = "调用转换为 JSON 失败: " + err.Error()
 				return
 			}
 			replyMsg = string(expensesJson)
 
-			
 			// 调用 Notion API 插入数据
 			feedback := insertToNotion(userConfig.DATABASE_ID, userConfig.NOTION_API_KEY, expenses)
 
@@ -227,11 +231,12 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 				replyBuilder.WriteString(message + "\n")
 			}
 			replyMsg = replyBuilder.String()
-		} else {
-			// 如果不是以 "0 " 开头，则使用正常的聊天处理
-			bot := chat.GetChatBot(config.GetUserBotType(userId))
-			replyMsg = bot.Chat(userId, msgContent)
+			return
 		}
+
+		// 如果不是以 "0 " 或 "1 " 开头，则使用正常的聊天处理
+		bot := chat.GetChatBot(config.GetUserBotType(userId))
+		replyMsg = bot.Chat(userId, msgContent)
 	} else {
 		// 如果是其他类型的消息，使用媒体消息的处理逻辑
 		bot := chat.GetChatBot(config.GetUserBotType(userId))
@@ -256,17 +261,17 @@ func processRequest_gongzi(Msg_get string) ([]map[string]interface{}, error) {
 
 	// 构造请求数据
 	prompt := fmt.Sprintf(`
-		今天是 %s，请根据以下工资记录生成 JSON 数据：
+		今天是 %s，请根据以下工资或收入记录生成 JSON 数据：
 		%s
-		如果没有指定日期，默认使用今天；如果没有金额，请估算一个合理的数值；单位默认是公司单位（例如 donghua）。；标签从下面选择：固定工资 ，兼职写代码 ，家人资助，人情往来礼金，其他兼职；
+		如果没有指定日期，默认使用今天；如果没有金额，请估算一个合理的数值；单位默认是公司单位（例如 ***公司）。；标签从下面选择：固定工资 ，兼职写代码 ，家人资助，人情往来礼金，其他兼职；
 		返回的 JSON 格式如下：
 		[
 			{
-				"名称": "工资名称",
+				"名称": "2025年1月份工资",
 				"标签": ["工资"],
 				"日期": "2025-01-12",
 				"金额": 10000,
-				"单位": "donghua"
+				"单位": "***"
 			}
 		]
 		支持一次性处理多条工资记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
@@ -354,7 +359,7 @@ func processRequest_gongzi(Msg_get string) ([]map[string]interface{}, error) {
 		}
 		if _, ok := expense["单位"]; !ok {
 			// 如果单位字段缺失，默认设置为公司单位
-			expense["单位"] = "donghua"
+			return nil, fmt.Errorf("missing required field: 单位")
 		}
 	}
 
