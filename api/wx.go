@@ -248,7 +248,7 @@ func QueryUserConfig(userId, databaseType string) (*UserConfig, error) {
 		UserId:         userIdField["title"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
 		NOTION_API_KEY: notionApiKeyField["rich_text"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
 		DATABASE_ID:    databaseIdField["rich_text"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
-		数据库类型:     databaseTypeField["select"].(map[string]interface{})["name"].(string),
+		DatabaseType:     databaseTypeField["select"].(map[string]interface{})["name"].(string),
 	}
 
 	return userConfig, nil
