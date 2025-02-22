@@ -30,6 +30,7 @@ type UserConfig struct {
 	UserId         string `json:"用户id"`
 	NOTION_API_KEY string `json:"NOTION_API_KEY"`
 	DATABASE_ID    string `json:"DATABASE_ID"`
+	DatabaseType     string `json:"数据库类型"` // 0: 记账数据库, 1: 记工资入账数据库
 }
 func GetGeminiKey() string {
 	return os.Getenv(Gemini_Key)
@@ -92,8 +93,8 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 			databaseId := strings.TrimSpace(strings.Split(lines[2], "=")[1])
 			databaseId = strings.Trim(databaseId, "'\"")
 
-			// 插入到 Notion 配置数据库
-			feedback := insertToNotionConfig(userId, notionApiKey, databaseId)
+			// 插入到 Notion 配置数据库，数据库类型默认为 0（记账数据库）
+			feedback := insertToNotionConfig(userId, notionApiKey, databaseId, "0")
 
 			// 输出反馈信息
 			var replyBuilder strings.Builder
@@ -106,9 +107,9 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 		}
 		// 检查文本消息是否以 "0 " 开头
 		if len(msgContent) >= 2 && msgContent[:2] == "0 " {
+			// 查询用户配置，数据库类型为 0（记账数据库）
+			userConfig, err := QueryUserConfig(userId, "0")
 			
-			// 查询用户配置
-			userConfig, err := QueryUserConfig(userId)
 			if err != nil {
 				log.Println("Error querying user config:", err)
 				replyMsg = "用户未绑定 ，请先绑定账号和 Notion 数据库"
@@ -159,7 +160,7 @@ func handleWxMessage(msg *message.MixMessage) (replyMsg string) {
 
 
 // QueryUserConfig 查询 Notion 数据库，获取用户的配置
-func QueryUserConfig(userId string) (*UserConfig, error) {
+func QueryUserConfig(userId, databaseType string) (*UserConfig, error) {
 	// Notion 配置数据库的 Database ID
 	configDatabaseId := os.Getenv("NOTION_CONFIG_DATABASE_ID")
 	if configDatabaseId == "" {
@@ -176,9 +177,19 @@ func QueryUserConfig(userId string) (*UserConfig, error) {
 	url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", configDatabaseId)
 	payload := map[string]interface{}{
 		"filter": map[string]interface{}{
-			"property": "用户id",
-			"title": map[string]interface{}{
-				"equals": userId,
+			"and": []map[string]interface{}{
+				{
+					"property": "用户id",
+					"title": map[string]interface{}{
+						"equals": userId,
+					},
+				},
+				{
+					"property": "数据库类型",
+					"select": map[string]interface{}{
+						"equals": databaseType, // 0: 记账数据库, 1: 记工资入账数据库
+					},
+				},
 			},
 		},
 	}
@@ -222,7 +233,7 @@ func QueryUserConfig(userId string) (*UserConfig, error) {
 	// 提取用户配置
 	results := result["results"].([]interface{})
 	if len(results) == 0 {
-		return nil, fmt.Errorf("user %s not found in Notion config database", userId)
+		return nil, fmt.Errorf("user %s with database type %s not found in Notion config database", userId, databaseType)
 	}
 
 	firstResult := results[0].(map[string]interface{})
@@ -231,17 +242,21 @@ func QueryUserConfig(userId string) (*UserConfig, error) {
 	userIdField := properties["用户id"].(map[string]interface{})
 	notionApiKeyField := properties["NOTION_API_KEY"].(map[string]interface{})
 	databaseIdField := properties["DATABASE_ID"].(map[string]interface{})
+	databaseTypeField := properties["数据库类型"].(map[string]interface{})
 
 	userConfig := &UserConfig{
 		UserId:         userIdField["title"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
 		NOTION_API_KEY: notionApiKeyField["rich_text"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
 		DATABASE_ID:    databaseIdField["rich_text"].([]interface{})[0].(map[string]interface{})["plain_text"].(string),
+		数据库类型:     databaseTypeField["select"].(map[string]interface{})["name"].(string),
 	}
 
 	return userConfig, nil
 }
 // insertToNotionConfig 将用户配置插入到 Notion 配置数据库
-func insertToNotionConfig(userId, notionApiKey, databaseId string) []string {
+// insertToNotionConfig 将用户配置插入到 Notion 配置数据库
+// insertToNotionConfig 将用户配置插入到 Notion 配置数据库
+func insertToNotionConfig(userId, notionApiKey, databaseId, databaseType string) []string {
 	// Notion 配置数据库的 Database ID
 	configDatabaseId := os.Getenv("NOTION_CONFIG_DATABASE_ID")
 	if configDatabaseId == "" {
@@ -261,7 +276,13 @@ func insertToNotionConfig(userId, notionApiKey, databaseId string) []string {
 		"Notion-Version": NOTION_API_VERSION,
 	}
 
-	// 构造请求数据
+	// 1. 查询是否已存在相同的用户 ID 和数据库类型
+	existingPageId, err := queryExistingPageId(userId, databaseType, configDatabaseId, notionApiKeyForConfig)
+	if err != nil {
+		return []string{fmt.Sprintf("Error querying existing page: %v", err)}
+	}
+
+	// 2. 构造请求数据
 	payload := map[string]interface{}{
 		"parent": map[string]interface{}{
 			"database_id": configDatabaseId,
@@ -294,16 +315,29 @@ func insertToNotionConfig(userId, notionApiKey, databaseId string) []string {
 					},
 				},
 			},
+			"数据库类型": map[string]interface{}{
+				"select": map[string]interface{}{
+					"name": databaseType, // 0: 记账数据库, 1: 记工资入账数据库
+				},
+			},
 		},
 	}
 
-	// 发送请求插入数据
+	// 3. 发送请求插入或更新数据
+	var url string
+	if existingPageId != "" {
+		// 如果记录已存在，更新数据
+		url = fmt.Sprintf("https://api.notion.com/v1/pages/%s", existingPageId)
+	} else {
+		// 如果记录不存在，插入新数据
+		url = "https://api.notion.com/v1/pages"
+	}
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return []string{fmt.Sprintf("Error marshalling payload: %v", err)}
 	}
 
-	url := "https://api.notion.com/v1/pages"
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return []string{fmt.Sprintf("Error creating request: %v", err)}
@@ -326,10 +360,82 @@ func insertToNotionConfig(userId, notionApiKey, databaseId string) []string {
 	}
 
 	if resp.StatusCode == http.StatusOK {
-		return []string{fmt.Sprintf("Successfully added: %s", userId)}
+		if existingPageId != "" {
+			return []string{fmt.Sprintf("Successfully updated: %s", userId)}
+		} else {
+			return []string{fmt.Sprintf("Successfully added: %s", userId)}
+		}
 	} else {
-		return []string{fmt.Sprintf("Failed to add %s: %s", userId, string(body))}
+		return []string{fmt.Sprintf("Failed to add/update %s: %s", userId, string(body))}
 	}
+}
+
+// queryExistingPageId 查询数据库中是否已存在相同的用户 ID 和数据库类型
+func queryExistingPageId(userId, databaseType, configDatabaseId, notionApiKey string) (string, error) {
+	url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", configDatabaseId)
+	payload := map[string]interface{}{
+		"filter": map[string]interface{}{
+			"and": []map[string]interface{}{
+				{
+					"property": "用户id",
+					"title": map[string]interface{}{
+						"equals": userId,
+					},
+				},
+				{
+					"property": "数据库类型",
+					"select": map[string]interface{}{
+						"equals": databaseType,
+					},
+				},
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling payload: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return "", fmt.Errorf("error creating request: %v", err)
+	}
+
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", notionApiKey))
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Notion-Version", NOTION_API_VERSION)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("error unmarshalling response: %v", err)
+	}
+
+	// 提取已有的记录 ID
+	results := result["results"].([]interface{})
+	if len(results) > 0 {
+		firstResult := results[0].(map[string]interface{})
+		return firstResult["id"].(string), nil
+	}
+
+	return "", nil
 }
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
     log.Println("Msg_get:", Msg_get)
