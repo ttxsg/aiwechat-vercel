@@ -1084,128 +1084,278 @@ func isValidDate(dateStr string) bool {
     _, err := time.Parse("2006-01-02", dateStr)
     return err == nil
 }
-
-
 func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
-	
-	log.Println("expenses:", expenses)
+    log.Println("expenses:", expenses)
 
+    // 设置请求头
+    headers := map[string]string{
+        "Authorization":  fmt.Sprintf("Bearer %s", notionApiKey),
+        "Content-Type":   "application/json",
+        "Notion-Version": NOTION_API_VERSION,
+    }
 
-	// 设置请求头
-	headers := map[string]string{
-		"Authorization":  fmt.Sprintf("Bearer %s", notionApiKey),
-		"Content-Type":   "application/json",
-		"Notion-Version": NOTION_API_VERSION,
-	}
+    var feedback []string
 
-	var feedback []string
+    // 确保 expenses 是一个 []map[string]interface{}
+    // 如果 expenses 是嵌套的数组，先将其展平
+    var flatExpenses []map[string]interface{}
+    for _, expense := range expenses {
+        if nestedExpenses, ok := expense["data"].([]map[string]interface{}); ok {
+            // 如果 expense 包含嵌套的 "data" 字段
+            flatExpenses = append(flatExpenses, nestedExpenses...)
+        } else {
+            // 否则直接添加到 flatExpenses
+            flatExpenses = append(flatExpenses, expense)
+        }
+    }
 
-	// 确保 expenses 是一个 []map[string]interface{}
-	// 如果 expenses 是嵌套的数组，先将其展平
-	var flatExpenses []map[string]interface{}
-	for _, expense := range expenses {
-		if nestedExpenses, ok := expense["data"].([]map[string]interface{}); ok {
-			// 如果 expense 包含嵌套的 "data" 字段
-			flatExpenses = append(flatExpenses, nestedExpenses...)
-		} else {
-			// 否则直接添加到 flatExpenses
-			flatExpenses = append(flatExpenses, expense)
-		}
-	}
+    // 向 Notion 插入每条记录
+    for _, entry := range flatExpenses {
+        // 检查必填字段是否存在
+        requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
+        for _, field := range requiredFields {
+            if _, exists := entry[field]; !exists {
+                feedback = append(feedback, fmt.Sprintf("Missing required field: %s in entry: %v", field, entry))
+                continue
+            }
+        }
 
-	// 向 Notion 插入每条记录
-	for _, entry := range flatExpenses {
-		payload := map[string]interface{}{
-			"parent": map[string]interface{}{
-				"database_id": databaseId,
-			},
-			"properties": map[string]interface{}{
-				"名称": map[string]interface{}{
-					"title": []map[string]interface{}{
-						{
-							"text": map[string]interface{}{
-								"content": entry["名称"].(string), // 确保字段名称和数据类型正确
-							},
-						},
-					},
-				},
-				"金额": map[string]interface{}{
-					"number": entry["金额"].(float64), // 确保字段名称和数据类型正确
-				},
-				"标签": map[string]interface{}{
-					"select": map[string]interface{}{
-						"name": entry["标签"].(string), // 确保字段名称和数据类型正确
-					},
-				},
-				"日期": map[string]interface{}{
-					"date": map[string]interface{}{
-						"start": entry["日期"].(string), // 确保字段名称和数据类型正确
-					},
-				},
-				"支付方式": map[string]interface{}{
-					"select": map[string]interface{}{
-						"name": entry["支付方式"].(string), // 确保字段名称和数据类型正确
-					},
-				},
-				"开支类型": map[string]interface{}{
-					"select": map[string]interface{}{
-						"name": entry["开支类型"].(string), // 确保字段名称和数据类型正确
-					},
-				},
-				"说明": map[string]interface{}{
-					"rich_text": []map[string]interface{}{
-						{
-							"text": map[string]interface{}{
-								"content": entry["说明"].(string), // 确保字段名称和数据类型正确
-							},
-						},
-					},
-				},
-				"备注": map[string]interface{}{
-					"rich_text": []map[string]interface{}{
-						{
-							"text": map[string]interface{}{
-								"content": entry["备注"].(string), // 确保字段名称和数据类型正确
-							},
-						},
-					},
-				},
-			},
-		}
+        // 处理可选字段（如说明和备注）
+        description := ""
+        if value, exists := entry["说明"]; exists && value != nil {
+            if strValue, ok := value.(string); ok {
+                description = strValue
+            } else {
+                feedback = append(feedback, fmt.Sprintf("Invalid 说明 field in entry: %v", entry))
+                continue
+            }
+        }
 
-		// 打印请求的 JSON 数据（用于调试）
-		payloadBytes, _ := json.Marshal(payload)
-		log.Println("Notion API request payload:", string(payloadBytes))
+        remark := ""
+        if value, exists := entry["备注"]; exists && value != nil {
+            if strValue, ok := value.(string); ok {
+                remark = strValue
+            } else {
+                feedback = append(feedback, fmt.Sprintf("Invalid 备注 field in entry: %v", entry))
+                continue
+            }
+        }
 
-		// 发送请求插入数据
-		req, err := http.NewRequest("POST", "https://api.notion.com/v1/pages", bytes.NewBuffer(payloadBytes))
-		if err != nil {
-			feedback = append(feedback, fmt.Sprintf("Error creating request for %v: %v", entry["名称"], err))
-			continue
-		}
+        payload := map[string]interface{}{
+            "parent": map[string]interface{}{
+                "database_id": databaseId,
+            },
+            "properties": map[string]interface{}{
+                "名称": map[string]interface{}{
+                    "title": []map[string]interface{}{
+                        {
+                            "text": map[string]interface{}{
+                                "content": entry["名称"].(string), // 确保字段名称和数据类型正确
+                            },
+                        },
+                    },
+                },
+                "金额": map[string]interface{}{
+                    "number": entry["金额"].(float64), // 确保字段名称和数据类型正确
+                },
+                "标签": map[string]interface{}{
+                    "select": map[string]interface{}{
+                        "name": entry["标签"].(string), // 确保字段名称和数据类型正确
+                    },
+                },
+                "日期": map[string]interface{}{
+                    "date": map[string]interface{}{
+                        "start": entry["日期"].(string), // 确保字段名称和数据类型正确
+                    },
+                },
+                "支付方式": map[string]interface{}{
+                    "select": map[string]interface{}{
+                        "name": entry["支付方式"].(string), // 确保字段名称和数据类型正确
+                    },
+                },
+                "开支类型": map[string]interface{}{
+                    "select": map[string]interface{}{
+                        "name": entry["开支类型"].(string), // 确保字段名称和数据类型正确
+                    },
+                },
+                "说明": map[string]interface{}{
+                    "rich_text": []map[string]interface{}{
+                        {
+                            "text": map[string]interface{}{
+                                "content": description, // 使用处理后的说明字段
+                            },
+                        },
+                    },
+                },
+                "备注": map[string]interface{}{
+                    "rich_text": []map[string]interface{}{
+                        {
+                            "text": map[string]interface{}{
+                                "content": remark, // 使用处理后的备注字段
+                            },
+                        },
+                    },
+                },
+            },
+        }
 
-		for key, value := range headers {
-			req.Header.Add(key, value)
-		}
+        // 打印请求的 JSON 数据（用于调试）
+        payloadBytes, _ := json.Marshal(payload)
+        log.Println("Notion API request payload:", string(payloadBytes))
 
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			feedback = append(feedback, fmt.Sprintf("Error inserting %v: %v", entry["名称"], err))
-			continue
-		}
-		defer resp.Body.Close()
+        // 发送请求插入数据
+        req, err := http.NewRequest("POST", "https://api.notion.com/v1/pages", bytes.NewBuffer(payloadBytes))
+        if err != nil {
+            feedback = append(feedback, fmt.Sprintf("Error creating request for %v: %v", entry["名称"], err))
+            continue
+        }
 
-		// 打印 Notion API 的响应（用于调试）
-		body, _ := ioutil.ReadAll(resp.Body)
-		log.Println("Notion API response:", string(body))
+        for key, value := range headers {
+            req.Header.Add(key, value)
+        }
 
-		if resp.StatusCode == http.StatusOK {
-			feedback = append(feedback, fmt.Sprintf("Successfully added: %v", entry["名称"]))
-		} else {
-			feedback = append(feedback, fmt.Sprintf("Failed to add %v: %v", entry["名称"], resp.Status))
-		}
-	}
+        client := &http.Client{}
+        resp, err := client.Do(req)
+        if err != nil {
+            feedback = append(feedback, fmt.Sprintf("Error inserting %v: %v", entry["名称"], err))
+            continue
+        }
+        defer resp.Body.Close()
 
-	return feedback
+        // 打印 Notion API 的响应（用于调试）
+        body, _ := ioutil.ReadAll(resp.Body)
+        log.Println("Notion API response:", string(body))
+
+        if resp.StatusCode == http.StatusOK {
+            feedback = append(feedback, fmt.Sprintf("Successfully added: %v", entry["名称"]))
+        } else {
+            feedback = append(feedback, fmt.Sprintf("Failed to add %v: %v", entry["名称"], resp.Status))
+        }
+    }
+
+    return feedback
 }
+
+// func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
+	
+// 	log.Println("expenses:", expenses)
+
+
+// 	// 设置请求头
+// 	headers := map[string]string{
+// 		"Authorization":  fmt.Sprintf("Bearer %s", notionApiKey),
+// 		"Content-Type":   "application/json",
+// 		"Notion-Version": NOTION_API_VERSION,
+// 	}
+
+// 	var feedback []string
+
+// 	// 确保 expenses 是一个 []map[string]interface{}
+// 	// 如果 expenses 是嵌套的数组，先将其展平
+// 	var flatExpenses []map[string]interface{}
+// 	for _, expense := range expenses {
+// 		if nestedExpenses, ok := expense["data"].([]map[string]interface{}); ok {
+// 			// 如果 expense 包含嵌套的 "data" 字段
+// 			flatExpenses = append(flatExpenses, nestedExpenses...)
+// 		} else {
+// 			// 否则直接添加到 flatExpenses
+// 			flatExpenses = append(flatExpenses, expense)
+// 		}
+// 	}
+
+// 	// 向 Notion 插入每条记录
+// 	for _, entry := range flatExpenses {
+// 		payload := map[string]interface{}{
+// 			"parent": map[string]interface{}{
+// 				"database_id": databaseId,
+// 			},
+// 			"properties": map[string]interface{}{
+// 				"名称": map[string]interface{}{
+// 					"title": []map[string]interface{}{
+// 						{
+// 							"text": map[string]interface{}{
+// 								"content": entry["名称"].(string), // 确保字段名称和数据类型正确
+// 							},
+// 						},
+// 					},
+// 				},
+// 				"金额": map[string]interface{}{
+// 					"number": entry["金额"].(float64), // 确保字段名称和数据类型正确
+// 				},
+// 				"标签": map[string]interface{}{
+// 					"select": map[string]interface{}{
+// 						"name": entry["标签"].(string), // 确保字段名称和数据类型正确
+// 					},
+// 				},
+// 				"日期": map[string]interface{}{
+// 					"date": map[string]interface{}{
+// 						"start": entry["日期"].(string), // 确保字段名称和数据类型正确
+// 					},
+// 				},
+// 				"支付方式": map[string]interface{}{
+// 					"select": map[string]interface{}{
+// 						"name": entry["支付方式"].(string), // 确保字段名称和数据类型正确
+// 					},
+// 				},
+// 				"开支类型": map[string]interface{}{
+// 					"select": map[string]interface{}{
+// 						"name": entry["开支类型"].(string), // 确保字段名称和数据类型正确
+// 					},
+// 				},
+// 				"说明": map[string]interface{}{
+// 					"rich_text": []map[string]interface{}{
+// 						{
+// 							"text": map[string]interface{}{
+// 								"content": entry["说明"].(string), // 确保字段名称和数据类型正确
+// 							},
+// 						},
+// 					},
+// 				},
+// 				"备注": map[string]interface{}{
+// 					"rich_text": []map[string]interface{}{
+// 						{
+// 							"text": map[string]interface{}{
+// 								"content": entry["备注"].(string), // 确保字段名称和数据类型正确
+// 							},
+// 						},
+// 					},
+// 				},
+// 			},
+// 		}
+
+// 		// 打印请求的 JSON 数据（用于调试）
+// 		payloadBytes, _ := json.Marshal(payload)
+// 		log.Println("Notion API request payload:", string(payloadBytes))
+
+// 		// 发送请求插入数据
+// 		req, err := http.NewRequest("POST", "https://api.notion.com/v1/pages", bytes.NewBuffer(payloadBytes))
+// 		if err != nil {
+// 			feedback = append(feedback, fmt.Sprintf("Error creating request for %v: %v", entry["名称"], err))
+// 			continue
+// 		}
+
+// 		for key, value := range headers {
+// 			req.Header.Add(key, value)
+// 		}
+
+// 		client := &http.Client{}
+// 		resp, err := client.Do(req)
+// 		if err != nil {
+// 			feedback = append(feedback, fmt.Sprintf("Error inserting %v: %v", entry["名称"], err))
+// 			continue
+// 		}
+// 		defer resp.Body.Close()
+
+// 		// 打印 Notion API 的响应（用于调试）
+// 		body, _ := ioutil.ReadAll(resp.Body)
+// 		log.Println("Notion API response:", string(body))
+
+// 		if resp.StatusCode == http.StatusOK {
+// 			feedback = append(feedback, fmt.Sprintf("Successfully added: %v", entry["名称"]))
+// 		} else {
+// 			feedback = append(feedback, fmt.Sprintf("Failed to add %v: %v", entry["名称"], resp.Status))
+// 		}
+// 	}
+
+// 	return feedback
+// }
