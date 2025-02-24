@@ -1070,17 +1070,6 @@ func isValidDate(dateStr string) bool {
     return err == nil
 }
 
-// 判断某个支付方式是否有效
-func contains(validMethods []string, method string) bool {
-    for _, valid := range validMethods {
-        if method == valid {
-            return true
-        }
-    }
-    return false
-}
-
-
 
 func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
 	
