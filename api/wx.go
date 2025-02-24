@@ -1075,13 +1075,6 @@ func insertToNotion(databaseId, notionApiKey string, expenses []map[string]inter
 	
 	log.Println("expenses:", expenses)
 
-   
-
-    // 处理可选字段（如备注）
-    remark := ""
-    if value, exists := expense["备注"]; exists && value != nil {
-        remark = value.(string)
-    }
 
 	// 设置请求头
 	headers := map[string]string{
