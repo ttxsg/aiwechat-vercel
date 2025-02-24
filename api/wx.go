@@ -864,7 +864,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 				"备注": "记得吃水果"
 			}
 		]
-		支持一次性处理多条工资记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
+		支持一次性处理多条支出记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
 	`, todayDate, Msg_get)
 
 	data := map[string]interface{}{
