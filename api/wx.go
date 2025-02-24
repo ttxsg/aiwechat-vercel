@@ -931,12 +931,10 @@ func queryExistingPageId(userId, databaseType, configDatabaseId, notionApiKey st
 //     return expenses, nil
 // }
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
-    log.Println("Msg_get:", Msg_get)
-    todayDate := time.Now().Format("2006-01-02")
-    log.Println("Today's date:", todayDate)
+    log.Println("Received request with message:", Msg_get)
 
+    todayDate := time.Now().Format("2006-01-02")
     apiKey := GetGeminiKey()
-    log.Println("apiKey:", apiKey)
     if apiKey == "" {
         return nil, fmt.Errorf("Gemini API key is empty")
     }
@@ -953,7 +951,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
                 "名称": "买水果",
                 "金额": 20,
                 "标签": "生活吃喝加买菜",
-                "日期": 2025-01-12,
+                "日期": "2025-01-12",
                 "支付方式": "微信",
                 "开支类型": "日常开支",
                 "备注": "记得吃水果"
@@ -962,40 +960,35 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
         支持一次性处理多条支出记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
     `, todayDate, Msg_get)
 
-    data := map[string]interface{}{
+    requestData := map[string]interface{}{
         "contents": []map[string]interface{}{
             {
                 "parts": []map[string]interface{}{
-                    {
-                        "text": prompt,
-                    },
+                    {"text": prompt},
                 },
             },
         },
     }
-    log.Println("发送的请求 data:", data)
-    payload, err := json.Marshal(data)
+
+    payload, err := json.Marshal(requestData)
     if err != nil {
-        return nil, fmt.Errorf("error marshalling data: %v", err)
+        return nil, fmt.Errorf("error marshalling request data: %v", err)
     }
 
     resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
     if err != nil {
-        log.Println("Gemini POST 请求 resp:", resp)
         return nil, fmt.Errorf("error sending request: %v", err)
     }
     defer resp.Body.Close()
 
     body, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        return nil, fmt.Errorf("error reading response: %v", err)
+        return nil, fmt.Errorf("error reading response body: %v", err)
     }
 
     if resp.StatusCode != http.StatusOK {
-        return nil, fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, string(body))
+        return nil, fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
     }
-
-    log.Println("Gemini API response body:", string(body))
 
     var apiResponse struct {
         Candidates []struct {
@@ -1008,28 +1001,20 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
     }
 
     if err := json.Unmarshal(body, &apiResponse); err != nil {
-        return nil, fmt.Errorf("error unmarshalling JSON: %v", err)
+        return nil, fmt.Errorf("error unmarshalling API response: %v", err)
     }
 
     if len(apiResponse.Candidates) == 0 || len(apiResponse.Candidates[0].Content.Parts) == 0 {
         return nil, fmt.Errorf("no valid content in API response")
     }
 
-    jsonText := apiResponse.Candidates[0].Content.Parts[0].Text
-    if jsonText == "" {
-        return nil, fmt.Errorf("empty text in API response")
-    }
-
+    jsonText := strings.TrimSpace(apiResponse.Candidates[0].Content.Parts[0].Text)
+    jsonText = strings.Trim(jsonText, "`") // 兼容 Markdown 代码块
     jsonText = strings.TrimSpace(jsonText)
-    jsonText = strings.TrimPrefix(jsonText, "```json")
-    jsonText = strings.TrimSuffix(jsonText, "```")
-    jsonText = strings.TrimSpace(jsonText)
-
-    log.Println("Cleaned JSON text:", jsonText)
 
     var expenses []map[string]interface{}
     if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
-        return nil, fmt.Errorf("error unmarshalling JSON content: %v", err)
+        return nil, fmt.Errorf("error parsing JSON response: %v", err)
     }
 
     return expenses, nil
