@@ -1012,7 +1012,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 
     jsonText := strings.TrimSpace(apiResponse.Candidates[0].Content.Parts[0].Text)
 
-    // 处理 Markdown 代码块格式
+    // 处理 Markdown 代码块格式，去除任何 Markdown 代码块标记
     jsonText = strings.TrimPrefix(jsonText, "```json")
     jsonText = strings.TrimPrefix(jsonText, "```")
     jsonText = strings.TrimSuffix(jsonText, "```")
@@ -1021,11 +1021,6 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
     log.Println("Cleaned JSON text:", jsonText)
 
     var expenses []map[string]interface{}
-    if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
-        return nil, fmt.Errorf("error parsing JSON response: %v", err)
-    }
-
-   var expenses []map[string]interface{}
     if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
         return nil, fmt.Errorf("error parsing JSON response: %v", err)
     }
@@ -1049,9 +1044,30 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
         if paymentMethod, ok := expense["支付方式"].(string); !ok || !contains(validPaymentMethods, paymentMethod) {
             return nil, fmt.Errorf("invalid payment method: %v", expense["支付方式"])
         }
+
+        // 校验日期格式
+        if dateStr, ok := expense["日期"].(string); !ok || !isValidDate(dateStr) {
+            return nil, fmt.Errorf("invalid date format: %v", expense["日期"])
+        }
     }
 
     return expenses, nil
+}
+
+// 判断支付方式是否有效
+func contains(validMethods []string, method string) bool {
+    for _, valid := range validMethods {
+        if method == valid {
+            return true
+        }
+    }
+    return false
+}
+
+// 检查日期格式是否合法 (YYYY-MM-DD)
+func isValidDate(dateStr string) bool {
+    _, err := time.Parse("2006-01-02", dateStr)
+    return err == nil
 }
 
 // 判断某个支付方式是否有效
@@ -1069,13 +1085,8 @@ func contains(validMethods []string, method string) bool {
 func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
 	
 	log.Println("expenses:", expenses)
-	// 检查必填字段
-    requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
-    for _, field := range requiredFields {
-        if value, exists := expense[field]; !exists || value == nil {
-            return fmt.Errorf("missing or nil field: %s", field)
-        }
-    }
+
+   
 
     // 处理可选字段（如备注）
     remark := ""
