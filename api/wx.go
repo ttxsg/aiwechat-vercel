@@ -930,18 +930,46 @@ func queryExistingPageId(userId, databaseType, configDatabaseId, notionApiKey st
 
 //     return expenses, nil
 // }
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// GetGeminiKey 是一个模拟函数，用于获取 Gemini API 的密钥
+func GetGeminiKey() string {
+	return "your_gemini_api_key" // 替换为实际的 API 密钥
+}
+
+// contains 是一个辅助函数，用于检查字符串是否在切片中
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
-    log.Println("Received request with message:", Msg_get)
+	log.Println("Received request with message:", Msg_get)
 
-    todayDate := time.Now().Format("2006-01-02")
-    apiKey := GetGeminiKey()
-    if apiKey == "" {
-        return nil, fmt.Errorf("Gemini API key is empty")
-    }
+	todayDate := time.Now().Format("2006-01-02")
+	apiKey := GetGeminiKey()
+	if apiKey == "" {
+		return nil, fmt.Errorf("Gemini API key is empty")
+	}
 
-    url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", apiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", apiKey)
 
-    prompt := fmt.Sprintf(`
+	prompt := fmt.Sprintf(`
         今天是 %s，请根据以下收入记录生成 JSON 数据：
         %s
         如果没有指定日期，默认使用今天；如果没有金额，请估算一个合理的数值；支付方式只有 支付宝 或微信 或银行卡 ；标签从以下内容选 生活吃喝加买菜 房贷-银行金 医疗保健 水电物业 出行 家人-互动生活穿衣用品 家用设备 电子设备 电话费 旅游 其他 摩托车 网购 学习课程；开支类型从下面选择：其他 日常开支 固定开支 社交娱乐开支 节假日开支 教育和自我提升开支 医疗保健开支 意外或紧急开支! 交通开支(出行) 加油 购物；
@@ -960,96 +988,112 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
         支持一次性处理多条支出记录，确保返回的数据是 JSON 格式，不要包含无关内容或注释。
     `, todayDate, Msg_get)
 
-    requestData := map[string]interface{}{
-        "contents": []map[string]interface{}{
-            {
-                "parts": []map[string]interface{}{
-                    {"text": prompt},
-                },
-            },
-        },
-    }
+	requestData := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"parts": []map[string]interface{}{
+					{"text": prompt},
+				},
+			},
+		},
+	}
 
-    payload, err := json.Marshal(requestData)
-    if err != nil {
-        return nil, fmt.Errorf("error marshalling request data: %v", err)
-    }
+	payload, err := json.Marshal(requestData)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling request data: %v", err)
+	}
 
-    resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
-    if err != nil {
-        return nil, fmt.Errorf("error sending request: %v", err)
-    }
-    defer resp.Body.Close()
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
 
-    body, err := ioutil.ReadAll(resp.Body)
-    if err != nil {
-        return nil, fmt.Errorf("error reading response body: %v", err)
-    }
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %v", err)
+	}
 
-    if resp.StatusCode != http.StatusOK {
-        return nil, fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
-    }
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
+	}
 
-    log.Println("Gemini API response body:", string(body)) // 记录 API 返回数据，方便调试
+	log.Println("Gemini API response body:", string(body)) // 记录 API 返回数据，方便调试
 
-    var apiResponse struct {
-        Candidates []struct {
-            Content struct {
-                Parts []struct {
-                    Text string `json:"text"`
-                } `json:"parts"`
-            } `json:"content"`
-        } `json:"candidates"`
-    }
+	var apiResponse struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
 
-    if err := json.Unmarshal(body, &apiResponse); err != nil {
-        return nil, fmt.Errorf("error unmarshalling API response: %v", err)
-    }
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("error unmarshalling API response: %v", err)
+	}
 
-    if len(apiResponse.Candidates) == 0 || len(apiResponse.Candidates[0].Content.Parts) == 0 {
-        return nil, fmt.Errorf("no valid content in API response")
-    }
+	if len(apiResponse.Candidates) == 0 || len(apiResponse.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("no valid content in API response")
+	}
 
-    jsonText := strings.TrimSpace(apiResponse.Candidates[0].Content.Parts[0].Text)
+	jsonText := strings.TrimSpace(apiResponse.Candidates[0].Content.Parts[0].Text)
 
-    // 处理 Markdown 代码块格式
-    jsonText = strings.TrimPrefix(jsonText, "```json")
-    jsonText = strings.TrimPrefix(jsonText, "```")
-    jsonText = strings.TrimSuffix(jsonText, "```")
-    jsonText = strings.TrimSpace(jsonText)
+	// 处理 Markdown 代码块格式
+	jsonText = strings.TrimPrefix(jsonText, "```json")
+	jsonText = strings.TrimPrefix(jsonText, "```")
+	jsonText = strings.TrimSuffix(jsonText, "```")
+	jsonText = strings.TrimSpace(jsonText)
 
-    log.Println("Cleaned JSON text:", jsonText)
+	log.Println("Cleaned JSON text:", jsonText)
 
-    var expenses []map[string]interface{}
-    if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
-        return nil, fmt.Errorf("error parsing JSON response: %v", err)
-    }
+	var expenses []map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
+		return nil, fmt.Errorf("error parsing JSON response: %v", err)
+	}
 
-    log.Println("expenses:", expenses)
+	log.Println("expenses:", expenses)
 
-    // 校验 JSON 数据是否符合预期格式
-    for _, expense := range expenses {
-        requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
-        for _, field := range requiredFields {
-            if value, exists := expense[field]; !exists || value == nil {
-                return nil, fmt.Errorf("missing or nil field: %s", field)
-            }
+	// 校验 JSON 数据是否符合预期格式
+	for _, expense := range expenses {
+		// 检查必填字段
+		requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
+		for _, field := range requiredFields {
+			value, exists := expense[field]
+			if !exists || value == nil {
+				return nil, fmt.Errorf("missing or nil field: %s", field)
+			}
 
-            // 检查字段类型是否符合预期
-            if field == "金额" {
-                if amount, ok := value.(float64); !ok || amount <= 0 {
-                    return nil, fmt.Errorf("invalid amount: %v", value)
-                }
-            } else if field == "支付方式" {
-                validPaymentMethods := []string{"支付宝", "微信", "银行卡"}
-                if paymentMethod, ok := value.(string); !ok || !contains(validPaymentMethods, paymentMethod) {
-                    return nil, fmt.Errorf("invalid payment method: %v", value)
-                }
-            }
-        }
-    }
+			// 检查字段类型是否符合预期
+			switch field {
+			case "金额":
+				if amount, ok := value.(float64); !ok || amount <= 0 {
+					return nil, fmt.Errorf("invalid amount: %v", value)
+				}
+			case "支付方式":
+				validPaymentMethods := []string{"支付宝", "微信", "银行卡"}
+				if paymentMethod, ok := value.(string); !ok || !contains(validPaymentMethods, paymentMethod) {
+					return nil, fmt.Errorf("invalid payment method: %v", value)
+				}
+			case "日期":
+				if date, ok := value.(string); !ok {
+					return nil, fmt.Errorf("invalid date format: %v", value)
+				}
+			}
+		}
 
-    return expenses, nil
+		// 处理可选字段（如备注）
+		if remark, exists := expense["备注"]; exists && remark != nil {
+			if _, ok := remark.(string); !ok {
+				return nil, fmt.Errorf("invalid remark field: %v", remark)
+			}
+		} else {
+			expense["备注"] = "" // 如果备注字段不存在或为 nil，设置为空字符串
+		}
+	}
+
+	return expenses, nil
 }
 
 // 判断支付方式是否有效
