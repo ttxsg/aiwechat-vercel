@@ -1031,42 +1031,41 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 
 	// 校验 JSON 数据是否符合预期格式
 	for _, expense := range expenses {
-		// 检查必填字段
-		requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
-		for _, field := range requiredFields {
-			value, exists := expense[field]
-			if !exists || value == nil {
-				return nil, fmt.Errorf("missing or nil field: %s", field)
-			}
-
-			// 检查字段类型是否符合预期
-			switch field {
-			case "金额":
-				if amount, ok := value.(float64); !ok || amount <= 0 {
-					return nil, fmt.Errorf("invalid amount: %v", value)
-				}
-			case "支付方式":
-				validPaymentMethods := []string{"支付宝", "微信", "银行卡"}
-				if paymentMethod, ok := value.(string); !ok || !contains(validPaymentMethods, paymentMethod) {
-					return nil, fmt.Errorf("invalid payment method: %v", value)
-				}
-			case "日期":
-				if date, ok := value.(string); !ok {
-					return nil, fmt.Errorf("invalid date format: %v", value)
-				}
-			}
-		}
-
-		// 处理可选字段（如备注）
-		if remark, exists := expense["备注"]; exists && remark != nil {
-			if _, ok := remark.(string); !ok {
-				return nil, fmt.Errorf("invalid remark field: %v", remark)
-			}
-		} else {
-			expense["备注"] = "" // 如果备注字段不存在或为 nil，设置为空字符串
-		}
+	    // 检查必填字段
+	    requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
+	    for _, field := range requiredFields {
+	        value, exists := expense[field]
+	        if !exists || value == nil {
+	            return nil, fmt.Errorf("missing or nil field: %s", field)
+	        }
+	
+	        // 检查字段类型是否符合预期
+	        switch field {
+	        case "金额":
+	            if amount, ok := value.(float64); !ok || amount <= 0 {
+	                return nil, fmt.Errorf("invalid amount: %v", value)
+	            }
+	        case "支付方式":
+	            validPaymentMethods := []string{"支付宝", "微信", "银行卡"}
+	            if paymentMethod, ok := value.(string); !ok || !contains(validPaymentMethods, paymentMethod) {
+	                return nil, fmt.Errorf("invalid payment method: %v", value)
+	            }
+	        case "日期":
+	            if _, ok := value.(string); !ok {
+	                return nil, fmt.Errorf("invalid date format: %v", value)
+	            }
+	        }
+	    }
+	
+	    // 处理可选字段（如备注）
+	    if remark, exists := expense["备注"]; exists && remark != nil {
+	        if _, ok := remark.(string); !ok {
+	            return nil, fmt.Errorf("invalid remark field: %v", remark)
+	        }
+	    } else {
+	        expense["备注"] = "" // 如果备注字段不存在或为 nil，设置为空字符串
+	    }
 	}
-
 	return expenses, nil
 }
 
