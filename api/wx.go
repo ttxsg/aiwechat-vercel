@@ -1029,14 +1029,36 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
     for _, expense := range expenses {
         requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
         for _, field := range requiredFields {
-            if _, exists := expense[field]; !exists {
-                return nil, fmt.Errorf("missing required field: %s", field)
+            if value, exists := expense[field]; !exists || value == nil {
+                return nil, fmt.Errorf("missing or nil field: %s", field)
             }
+        }
+
+        // 额外检查金额字段是否为合法数值
+        if amount, ok := expense["金额"].(float64); !ok || amount <= 0 {
+            return nil, fmt.Errorf("invalid amount: %v", expense["金额"])
+        }
+
+        // 检查支付方式是否合法
+        validPaymentMethods := []string{"支付宝", "微信", "银行卡"}
+        if paymentMethod, ok := expense["支付方式"].(string); !ok || !contains(validPaymentMethods, paymentMethod) {
+            return nil, fmt.Errorf("invalid payment method: %v", expense["支付方式"])
         }
     }
 
     return expenses, nil
 }
+
+// 判断某个支付方式是否有效
+func contains(validMethods []string, method string) bool {
+    for _, valid := range validMethods {
+        if method == valid {
+            return true
+        }
+    }
+    return false
+}
+
 
 
 func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
