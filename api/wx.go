@@ -1012,7 +1012,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 
     jsonText := strings.TrimSpace(apiResponse.Candidates[0].Content.Parts[0].Text)
 
-    // 处理 Markdown 代码块格式，去除任何 Markdown 代码块标记
+    // 处理 Markdown 代码块格式
     jsonText = strings.TrimPrefix(jsonText, "```json")
     jsonText = strings.TrimPrefix(jsonText, "```")
     jsonText = strings.TrimSuffix(jsonText, "```")
@@ -1025,6 +1025,8 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
         return nil, fmt.Errorf("error parsing JSON response: %v", err)
     }
 
+    log.Println("expenses:", expenses)
+
     // 校验 JSON 数据是否符合预期格式
     for _, expense := range expenses {
         requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
@@ -1032,22 +1034,18 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
             if value, exists := expense[field]; !exists || value == nil {
                 return nil, fmt.Errorf("missing or nil field: %s", field)
             }
-        }
 
-        // 检查金额字段是否为合法数值
-        if amount, ok := expense["金额"].(float64); !ok || amount <= 0 {
-            return nil, fmt.Errorf("invalid amount: %v", expense["金额"])
-        }
-
-        // 检查支付方式是否合法
-        validPaymentMethods := []string{"支付宝", "微信", "银行卡"}
-        if paymentMethod, ok := expense["支付方式"].(string); !ok || !contains(validPaymentMethods, paymentMethod) {
-            return nil, fmt.Errorf("invalid payment method: %v", expense["支付方式"])
-        }
-
-        // 校验日期格式
-        if dateStr, ok := expense["日期"].(string); !ok || !isValidDate(dateStr) {
-            return nil, fmt.Errorf("invalid date format: %v", expense["日期"])
+            // 检查字段类型是否符合预期
+            if field == "金额" {
+                if amount, ok := value.(float64); !ok || amount <= 0 {
+                    return nil, fmt.Errorf("invalid amount: %v", value)
+                }
+            } else if field == "支付方式" {
+                validPaymentMethods := []string{"支付宝", "微信", "银行卡"}
+                if paymentMethod, ok := value.(string); !ok || !contains(validPaymentMethods, paymentMethod) {
+                    return nil, fmt.Errorf("invalid payment method: %v", value)
+                }
+            }
         }
     }
 
