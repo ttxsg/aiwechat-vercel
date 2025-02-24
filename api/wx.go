@@ -821,6 +821,115 @@ func queryExistingPageId(userId, databaseType, configDatabaseId, notionApiKey st
 
 	return "", nil
 }
+// func processRequest(Msg_get string) ([]map[string]interface{}, error) {
+//     log.Println("Msg_get:", Msg_get)
+//     todayDate := time.Now().Format("2006-01-02")
+//     log.Println("Today's date:", todayDate)
+
+//     apiKey := GetGeminiKey()
+//     log.Println("apiKey:", apiKey)
+//     if apiKey == "" {
+//         return nil, fmt.Errorf("Gemini API key is empty")
+//     }
+
+//     url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", apiKey)
+
+   
+// // 	data := map[string]interface{}{
+// //     "contents": []map[string]interface{}{
+// //         {
+// //             "parts": []map[string]interface{}{
+// //                 {
+// //                     "text": fmt.Sprintf("今天是 %s ，记账 %s ，如果没有指定时间，默认是今天；如果没有金额，帮我虚拟估算一个数；支付方式只有 支付宝 或微信 或银行卡 ；标签从以下内容选 生活吃喝加买菜 房贷-银行金 医疗保健 水电物业 出行 家人-互动生活穿衣用品 家用设备 电子设备 电话费 旅游 其他 摩托车 网购 学习课程；开支类型从下面选择：其他 日常开支 固定开支 社交娱乐开支 节假日开支 教育和自我提升开支 医疗保健开支 意外或紧急开支!! 交通开支(出行) 加油 购物；注意 你给我返回一个json组合成的列表格式，不要和内容无关的东西，不要重复给我，其中不需要换行符，下面给你一个例子，和内容无关：“data =名称: 买水果, 金额: 20, 标签: 生活吃喝加买菜, 日期：2025-01-12，支付方式: 微信,开支类型：日常开支 ，说明: 水果购买，备注: 每天都要吃", todayDate, Msg_get),
+// //                 },
+// //             },
+// //         },
+// //     },
+		
+// // }
+// // 构造请求数据
+// 	prompt := fmt.Sprintf(`
+// 		今天是 %s，请根据以下收入记录生成 JSON 数据：
+// 		%s
+// 		如果没有指定日期，默认使用今天；如果没有金额，请估算一个合理的数值；支付方式只有 支付宝 或微信 或银行卡 ；标签从以下内容选 生活吃喝加买菜 房贷-银行金 医疗保健 水电物业 出行 家人-互动生活穿衣用品 家用设备 电子设备 电话费 旅游 其他 摩托车 网购 学习课程；开支类型从下面选择：其他 日常开支 固定开支 社交娱乐开支 节假日开支 教育和自我提升开支 医疗保健开支 意外或紧急开支! 交通开支(出行) 加油 购物；
+// 		返回的 JSON 格式如下：
+// 		[
+// 			{
+// 				"名称": "买水果",
+// 				"金额": 20,
+// 				"标签": "生活吃喝加买菜",
+// 				"日期": 2025-01-12,
+// 				"支付方式": "微信",
+//     				"开支类型": "日常开支",
+// 				"备注": "记得吃水果"
+// 			}
+// 		]
+// 		支持一次性处理多条支出记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
+// 	`, todayDate, Msg_get)
+
+// 	data := map[string]interface{}{
+// 		"contents": []map[string]interface{}{
+// 			{
+// 				"parts": []map[string]interface{}{
+// 					{
+// 						"text": prompt,
+// 					},
+// 				},
+// 			},
+// 		},
+// 	}
+//     log.Println("发送的请求 data:", data)
+//     payload, err := json.Marshal(data)
+//     if err != nil {
+//         return nil, fmt.Errorf("error marshalling data: %v", err)
+//     }
+
+//     resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
+//     if err != nil {
+//         log.Println("Gemini POST 请求 resp:", resp)
+//         return nil, fmt.Errorf("error sending request: %v", err)
+//     }
+//     defer resp.Body.Close()
+
+//     body, err := ioutil.ReadAll(resp.Body)
+//     if err != nil {
+//         return nil, fmt.Errorf("error reading response: %v", err)
+//     }
+
+//     if resp.StatusCode != http.StatusOK {
+//         return nil, fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, string(body))
+//     }
+
+//     log.Println("Gemini API response body:", string(body))
+
+//     var apiResponse struct {
+//         Candidates []struct {
+//             Content struct {
+//                 Parts []struct {
+//                     Text string `json:"text"`
+//                 } `json:"parts"`
+//             } `json:"content"`
+//         } `json:"candidates"`
+//     }
+
+//     if err := json.Unmarshal(body, &apiResponse); err != nil {
+//         return nil, fmt.Errorf("error unmarshalling JSON: %v", err)
+//     }
+
+//     jsonText := apiResponse.Candidates[0].Content.Parts[0].Text
+//     jsonText = strings.TrimSpace(jsonText)
+//     jsonText = strings.TrimPrefix(jsonText, "```json")
+//     jsonText = strings.TrimSuffix(jsonText, "```")
+
+//     log.Println("Cleaned JSON text:", jsonText)
+
+//     var expenses []map[string]interface{}
+//     if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
+//         return nil, fmt.Errorf("error unmarshalling JSON content: %v", err)
+//     }
+
+//     return expenses, nil
+// }
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
     log.Println("Msg_get:", Msg_get)
     todayDate := time.Now().Format("2006-01-02")
@@ -834,50 +943,36 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 
     url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=%s", apiKey)
 
-   
-// 	data := map[string]interface{}{
-//     "contents": []map[string]interface{}{
-//         {
-//             "parts": []map[string]interface{}{
-//                 {
-//                     "text": fmt.Sprintf("今天是 %s ，记账 %s ，如果没有指定时间，默认是今天；如果没有金额，帮我虚拟估算一个数；支付方式只有 支付宝 或微信 或银行卡 ；标签从以下内容选 生活吃喝加买菜 房贷-银行金 医疗保健 水电物业 出行 家人-互动生活穿衣用品 家用设备 电子设备 电话费 旅游 其他 摩托车 网购 学习课程；开支类型从下面选择：其他 日常开支 固定开支 社交娱乐开支 节假日开支 教育和自我提升开支 医疗保健开支 意外或紧急开支!! 交通开支(出行) 加油 购物；注意 你给我返回一个json组合成的列表格式，不要和内容无关的东西，不要重复给我，其中不需要换行符，下面给你一个例子，和内容无关：“data =名称: 买水果, 金额: 20, 标签: 生活吃喝加买菜, 日期：2025-01-12，支付方式: 微信,开支类型：日常开支 ，说明: 水果购买，备注: 每天都要吃", todayDate, Msg_get),
-//                 },
-//             },
-//         },
-//     },
-		
-// }
-// 构造请求数据
-	prompt := fmt.Sprintf(`
-		今天是 %s，请根据以下收入记录生成 JSON 数据：
-		%s
-		如果没有指定日期，默认使用今天；如果没有金额，请估算一个合理的数值；支付方式只有 支付宝 或微信 或银行卡 ；标签从以下内容选 生活吃喝加买菜 房贷-银行金 医疗保健 水电物业 出行 家人-互动生活穿衣用品 家用设备 电子设备 电话费 旅游 其他 摩托车 网购 学习课程；开支类型从下面选择：其他 日常开支 固定开支 社交娱乐开支 节假日开支 教育和自我提升开支 医疗保健开支 意外或紧急开支! 交通开支(出行) 加油 购物；
-		返回的 JSON 格式如下：
-		[
-			{
-				"名称": "买水果",
-				"金额": 20,
-				"标签": "生活吃喝加买菜",
-				"日期": 2025-01-12,
-				"支付方式": "微信",
-    				"开支类型": "日常开支",
-				"备注": "记得吃水果"
-			}
-		]
-		支持一次性处理多条支出记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
-	`, todayDate, Msg_get)
+    prompt := fmt.Sprintf(`
+        今天是 %s，请根据以下收入记录生成 JSON 数据：
+        %s
+        如果没有指定日期，默认使用今天；如果没有金额，请估算一个合理的数值；支付方式只有 支付宝 或微信 或银行卡 ；标签从以下内容选 生活吃喝加买菜 房贷-银行金 医疗保健 水电物业 出行 家人-互动生活穿衣用品 家用设备 电子设备 电话费 旅游 其他 摩托车 网购 学习课程；开支类型从下面选择：其他 日常开支 固定开支 社交娱乐开支 节假日开支 教育和自我提升开支 医疗保健开支 意外或紧急开支! 交通开支(出行) 加油 购物；
+        返回的 JSON 格式如下：
+        [
+            {
+                "名称": "买水果",
+                "金额": 20,
+                "标签": "生活吃喝加买菜",
+                "日期": 2025-01-12,
+                "支付方式": "微信",
+                "开支类型": "日常开支",
+                "备注": "记得吃水果"
+            }
+        ]
+        支持一次性处理多条支出记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
+    `, todayDate, Msg_get)
 
-	data := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"parts": []map[string]interface{}{
-					{
-						"text": prompt,
-					},
-				},
-			},
-		},
-	}
+    data := map[string]interface{}{
+        "contents": []map[string]interface{}{
+            {
+                "parts": []map[string]interface{}{
+                    {
+                        "text": prompt,
+                    },
+                },
+            },
+        },
+    }
     log.Println("发送的请求 data:", data)
     payload, err := json.Marshal(data)
     if err != nil {
@@ -916,10 +1011,19 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
         return nil, fmt.Errorf("error unmarshalling JSON: %v", err)
     }
 
+    if len(apiResponse.Candidates) == 0 || len(apiResponse.Candidates[0].Content.Parts) == 0 {
+        return nil, fmt.Errorf("no valid content in API response")
+    }
+
     jsonText := apiResponse.Candidates[0].Content.Parts[0].Text
+    if jsonText == "" {
+        return nil, fmt.Errorf("empty text in API response")
+    }
+
     jsonText = strings.TrimSpace(jsonText)
     jsonText = strings.TrimPrefix(jsonText, "```json")
     jsonText = strings.TrimSuffix(jsonText, "```")
+    jsonText = strings.TrimSpace(jsonText)
 
     log.Println("Cleaned JSON text:", jsonText)
 
@@ -930,7 +1034,6 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 
     return expenses, nil
 }
-
 
 func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
 	log.Println("expenses:", expenses)
