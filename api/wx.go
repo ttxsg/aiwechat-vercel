@@ -930,33 +930,7 @@ func queryExistingPageId(userId, databaseType, configDatabaseId, notionApiKey st
 
 //     return expenses, nil
 // }
-package main
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"strings"
-	"time"
-)
-
-// GetGeminiKey 是一个模拟函数，用于获取 Gemini API 的密钥
-func GetGeminiKey() string {
-	return "your_gemini_api_key" // 替换为实际的 API 密钥
-}
-
-// contains 是一个辅助函数，用于检查字符串是否在切片中
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
 
 func processRequest(Msg_get string) ([]map[string]interface{}, error) {
 	log.Println("Received request with message:", Msg_get)
