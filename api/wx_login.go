@@ -1,10 +1,12 @@
 package api
 
+
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"io/ioutil"
+	"os"  // 导入 os 包来读取环境变量
 	"github.com/silenceper/wechat/v2"
 	"github.com/silenceper/wechat/v2/cache"
 	"github.com/silenceper/wechat/v2/miniprogram/config"
@@ -37,12 +39,21 @@ func MiniProgramLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 从环境变量读取 AppID 和 AppSecret
+	appID := os.Getenv("WECHAT_APPID")
+	appSecret := os.Getenv("WECHAT_APPSECRET")
+
+	if appID == "" || appSecret == "" {
+		http.Error(w, "微信小程序 AppID 或 AppSecret 未设置", http.StatusInternalServerError)
+		return
+	}
+
 	// 初始化微信小程序配置
 	wc := wechat.NewWechat()
 	memory := cache.NewMemory()
 	cfg := &config.Config{
-		AppID:     "your-appid",      // 替换为你的小程序 AppID
-		AppSecret: "your-appsecret",  // 替换为你的小程序 AppSecret
+		AppID:     appID,        // 使用环境变量中的 AppID
+		AppSecret: appSecret,    // 使用环境变量中的 AppSecret
 		Cache:     memory,
 	}
 	miniProgram := wc.GetMiniProgram(cfg)
