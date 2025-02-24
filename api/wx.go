@@ -957,7 +957,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
                 "备注": "记得吃水果"
             }
         ]
-        支持一次性处理多条支出记录，请确保返回的数据是 JSON 格式，不要包含无关内容或注释。
+        支持一次性处理多条支出记录，确保返回的数据是 JSON 格式，不要包含无关内容或注释。
     `, todayDate, Msg_get)
 
     requestData := map[string]interface{}{
@@ -990,6 +990,8 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
         return nil, fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
     }
 
+    log.Println("Gemini API response body:", string(body)) // 记录 API 返回数据，方便调试
+
     var apiResponse struct {
         Candidates []struct {
             Content struct {
@@ -1009,16 +1011,33 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
     }
 
     jsonText := strings.TrimSpace(apiResponse.Candidates[0].Content.Parts[0].Text)
-    jsonText = strings.Trim(jsonText, "`") // 兼容 Markdown 代码块
+
+    // 处理 Markdown 代码块格式
+    jsonText = strings.TrimPrefix(jsonText, "```json")
+    jsonText = strings.TrimPrefix(jsonText, "```")
+    jsonText = strings.TrimSuffix(jsonText, "```")
     jsonText = strings.TrimSpace(jsonText)
+
+    log.Println("Cleaned JSON text:", jsonText)
 
     var expenses []map[string]interface{}
     if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
         return nil, fmt.Errorf("error parsing JSON response: %v", err)
     }
 
+    // 校验 JSON 数据是否符合预期格式
+    for _, expense := range expenses {
+        requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
+        for _, field := range requiredFields {
+            if _, exists := expense[field]; !exists {
+                return nil, fmt.Errorf("missing required field: %s", field)
+            }
+        }
+    }
+
     return expenses, nil
 }
+
 
 func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
 	log.Println("expenses:", expenses)
