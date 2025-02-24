@@ -1025,6 +1025,11 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
         return nil, fmt.Errorf("error parsing JSON response: %v", err)
     }
 
+   var expenses []map[string]interface{}
+    if err := json.Unmarshal([]byte(jsonText), &expenses); err != nil {
+        return nil, fmt.Errorf("error parsing JSON response: %v", err)
+    }
+
     // 校验 JSON 数据是否符合预期格式
     for _, expense := range expenses {
         requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
@@ -1034,7 +1039,7 @@ func processRequest(Msg_get string) ([]map[string]interface{}, error) {
             }
         }
 
-        // 额外检查金额字段是否为合法数值
+        // 检查金额字段是否为合法数值
         if amount, ok := expense["金额"].(float64); !ok || amount <= 0 {
             return nil, fmt.Errorf("invalid amount: %v", expense["金额"])
         }
@@ -1062,7 +1067,21 @@ func contains(validMethods []string, method string) bool {
 
 
 func insertToNotion(databaseId, notionApiKey string, expenses []map[string]interface{}) []string {
+	
 	log.Println("expenses:", expenses)
+	// 检查必填字段
+    requiredFields := []string{"名称", "金额", "标签", "日期", "支付方式", "开支类型"}
+    for _, field := range requiredFields {
+        if value, exists := expense[field]; !exists || value == nil {
+            return fmt.Errorf("missing or nil field: %s", field)
+        }
+    }
+
+    // 处理可选字段（如备注）
+    remark := ""
+    if value, exists := expense["备注"]; exists && value != nil {
+        remark = value.(string)
+    }
 
 	// 设置请求头
 	headers := map[string]string{
