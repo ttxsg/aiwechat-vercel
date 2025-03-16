@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	// 微信语音识别API路径
 	WECHAT_VOICE_RECOGNIZE_URL = "https://api.weixin.qq.com/cgi-bin/media/voice/addvoicetorecofortext"
+	WECHAT_TOKEN_URL            = "https://api.weixin.qq.com/cgi-bin/token"
 )
 
 // 语音识别请求参数结构
@@ -40,18 +40,34 @@ type VoiceRecognizeResponse struct {
 		Text       string `json:"text"`
 		Sentence   []struct {
 			Text      string `json:"text"`
-		_CONFidence float64 `json:"confidence"`
+		CONFidence float64 `json:"confidence"`
 		} `json:"sentence"`
 	} `json:"result,omitempty"`
 }
 
 func init() {
-	// 注册路由
 	http.HandleFunc("/api/wechat/voice/upload", handleVoiceUpload)
 }
 
 func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
-	// 创建表单解析器
+	// 获取微信凭证
+	appID := os.Getenv("WECHAT_APPID")
+	appSecret := os.Getenv("WECHAT_APPSECRET")
+	if appID == "" || appSecret == "" {
+		log.Println("微信凭证未配置")
+		http.Error(w, "微信凭证未配置", http.StatusInternalServerError)
+		return
+	}
+
+	// 获取access_token
+	accessToken, err := getAccessToken(appID, appSecret)
+	if err != nil {
+		log.Printf("获取access_token失败: %v", err)
+		http.Error(w, "无法获取微信访问凭证", http.StatusInternalServerError)
+		return
+	}
+
+	// 解析请求参数和文件
 	form := multipart.NewForm()
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		log.Printf("文件上传解析失败: %v", err)
@@ -59,7 +75,6 @@ func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 绑定请求参数
 	var req VoiceRecognizeRequest
 	if err := form.Decode(&req); err != nil {
 		log.Printf("参数解析失败: %v", err)
@@ -67,13 +82,10 @@ func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 校验必填参数
-	if req.AccessToken == "" || req.VoiceID == "" || req.Format == "" {
-		http.Error(w, "缺少必要参数", http.StatusBadRequest)
-		return
-	}
+	// 补全必填参数
+	req.AccessToken = accessToken
 
-	// 构建微信API请求
+	// 构建API请求
 	apiURL := fmt.Sprintf("%s?access_token=%s&voice_id=%s&format=%s&lang=%s",
 		WECHAT_VOICE_RECOGNIZE_URL,
 		req.AccessToken,
@@ -116,7 +128,6 @@ func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 设置请求头
 	reqHTTP.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := client.Do(reqHTTP)
@@ -143,7 +154,7 @@ func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 处理错误响应
+	// 处理微信API错误
 	if respData.ErrCode != 0 {
 		log.Printf("微信API错误: %d %s", respData.ErrCode, respData.ErrMsg)
 		http.Error(w, fmt.Sprintf("识别失败：%d %s", respData.ErrCode, respData.ErrMsg), http.StatusBadRequest)
@@ -164,4 +175,39 @@ func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// 获取微信access_token
+func getAccessToken(appID, appSecret string) (string, error) {
+	url := fmt.Sprintf("%s?grant_type=client_credential&appid=%s&secret=%s",
+		WECHAT_TOKEN_URL,
+		appID,
+		appSecret,
+	)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("get token request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("get token failed: status code %d", resp.StatusCode)
+	}
+
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn  int    `json:"expires_in"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", fmt.Errorf("parse token response failed: %v", err)
+	}
+
+	if tokenResp.AccessToken == "" {
+		return "", fmt.Errorf("access_token not found in response")
+	}
+
+	return tokenResp.AccessToken, nil
 }
