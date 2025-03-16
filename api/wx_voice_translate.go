@@ -37,16 +37,17 @@ type VoiceRecognizeResponse struct {
 	ErrCode int    `json:"err_code"`
 	ErrMsg  string `json:"err_msg"`
 	Result  struct {
-		Text       string `json:"text"`
-		Sentence   []struct {
-			Text      string `json:"text"`
-		CONFidence float64 `json:"confidence"`
+		Text     string `json:"text"`
+		Sentence []struct {
+			Text       string  `json:"text"`
+			Confidence float64 `json:"confidence"`
 		} `json:"sentence"`
 	} `json:"result,omitempty"`
 }
 
-func init() {
-	http.HandleFunc("/api/wechat/voice/upload", handleVoiceUpload)
+// Handler函数 - Vercel Serverless Functions 的入口点
+func Handler(w http.ResponseWriter, r *http.Request) {
+	handleVoiceUpload(w, r)
 }
 
 func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
@@ -68,37 +69,32 @@ func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 解析请求参数和文件
-	form := multipart.NewForm()
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		log.Printf("文件上传解析失败: %v", err)
 		http.Error(w, "文件上传失败", http.StatusBadRequest)
 		return
 	}
 
-	var req VoiceRecognizeRequest
-	if err := form.Decode(&req); err != nil {
-		log.Printf("参数解析失败: %v", err)
-		http.Error(w, "参数格式错误", http.StatusBadRequest)
+	// 获取参数
+	voiceID := r.FormValue("voice_id")
+	format := r.FormValue("format")
+	lang := r.FormValue("lang")
+
+	if voiceID == "" || format == "" {
+		http.Error(w, "必需参数缺失", http.StatusBadRequest)
 		return
 	}
-
-	// 补全必填参数
-	req.AccessToken = accessToken
 
 	// 构建API请求
 	apiURL := fmt.Sprintf("%s?access_token=%s&voice_id=%s&format=%s&lang=%s",
 		WECHAT_VOICE_RECOGNIZE_URL,
-		req.AccessToken,
-		req.VoiceID,
-		req.Format,
-		strings.TrimSpace(req.Lang),
+		accessToken,
+		voiceID,
+		format,
+		strings.TrimSpace(lang),
 	)
 
-	// 创建请求体
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	
-	// 添加语音文件
+	// 获取语音文件
 	file, handler, err := r.FormFile("voice")
 	if err != nil {
 		log.Printf("获取语音文件失败: %v", err)
@@ -107,8 +103,20 @@ func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	if err := writer.AddFormFile("voice", handler.Filename, file); err != nil {
-		log.Printf("文件添加失败: %v", err)
+	// 创建请求体
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	
+	// 添加语音文件
+	part, err := writer.CreateFormFile("voice", handler.Filename)
+	if err != nil {
+		log.Printf("创建表单文件失败: %v", err)
+		http.Error(w, "文件上传失败", http.StatusInternalServerError)
+		return
+	}
+	
+	if _, err := io.Copy(part, file); err != nil {
+		log.Printf("复制文件内容失败: %v", err)
 		http.Error(w, "文件上传失败", http.StatusInternalServerError)
 		return
 	}
@@ -165,8 +173,8 @@ func handleVoiceUpload(w http.ResponseWriter, r *http.Request) {
 	result := struct {
 		Text      string `json:"text"`
 		Sentence  []struct {
-			Text      string     `json:"text"`
-			Confidence float64  `json:"confidence"`
+			Text      string  `json:"text"`
+			Confidence float64 `json:"confidence"`
 		} `json:"sentence"`
 	}{
 		Text:      respData.Result.Text,
