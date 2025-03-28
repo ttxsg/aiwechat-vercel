@@ -22,20 +22,6 @@ type ConfigResponse struct {
 	Timestamp string `json:"timestamp"`
 }
 
-func check_api() {
-	// 设置路由
-	http.HandleFunc("/api/check_api", apiKeyHandler)
-	
-	// 获取端口，Vercel会自动设置PORT环境变量
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080" // 默认端口
-	}
-	
-	// 启动服务
-	log.Printf("服务启动在 :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
-}
 
 // API密钥处理器
 func apiKeyHandler(w http.ResponseWriter, r *http.Request) {
