@@ -57,9 +57,9 @@ func apiKeyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// 检索环境变量中的配置
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	endpoint := os.Getenv("OPENAI_ENDPOINT")
-	modelName := os.Getenv("OPENAI_MODEL")
+	apiKey := os.Getenv("Github_TORKEN")
+	endpoint := os.Getenv("Github_ENDPOINT")
+	modelName := os.Getenv("Github_MODEL")
 	
 	// 验证必要的变量
 	if apiKey == "" {
