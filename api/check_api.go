@@ -17,7 +17,7 @@ type Response struct {
 }
 
 // Handler 函数 - 符合 Vercel 要求的入口点
-func checkAPI(w http.ResponseWriter, r *http.Request) {
+func CheckAPI(w http.ResponseWriter, r *http.Request) {
 	// 设置CORS
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
